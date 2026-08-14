@@ -1,0 +1,269 @@
+/* dsh-wx-skin panel + sidebar entry styles (CSS Modules; compiled + injected by the client bundle). */
+
+/* ---- sidebar entry row (injected DOM, mirrors the shell's nav-row look) ---- */
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.entry:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
+}
+
+.entry[data-active='true'] {
+  background: var(--dsw-alias-interactive-bg-active, rgba(103, 88, 212, 0.12));
+  color: var(--dsw-alias-state-business-primary, #6758d4);
+}
+
+.entryIcon {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--dsw-alias-state-business-primary, #6758d4);
+}
+
+.entryLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- popover panel ---- */
+.panel {
+  box-sizing: border-box;
+  width: 300px;
+  max-height: min(80vh, 560px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border-radius: 10px;
+  /* Opaque static palette (the skin never overrides static tokens), so the
+     panel stays readable over any background. */
+  background: var(--dsw-static-neutral-bluish-100, #fff);
+  color: var(--dsw-alias-label-primary, #26231f);
+  font-size: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 650;
+}
+
+.close {
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #77736d);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.close:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.toggleRow input {
+  accent-color: var(--dsw-alias-state-business-primary, #6758d4);
+}
+
+.preview {
+  display: grid;
+  place-items: center;
+  height: 72px;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border-radius: 8px;
+  background-position: center;
+  background-size: cover;
+  color: var(--dsw-alias-label-secondary, #77736d);
+  overflow: hidden;
+}
+
+.currentBadge {
+  margin-bottom: 10px;
+  color: var(--dsw-alias-label-secondary, #77736d);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section {
+  margin: 10px 0 6px;
+  color: var(--dsw-alias-label-secondary, #77736d);
+  font-size: 11px;
+}
+
+.button {
+  height: 30px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border-radius: 8px;
+  background: var(--dsw-static-neutral-bluish-200, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.button:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.buttonPrimary {
+  composes: button;
+  border-color: var(--dsw-alias-state-business-primary, #6758d4);
+  background: var(--dsw-alias-state-business-primary, #6758d4);
+  color: #fff;
+}
+
+.fileInput {
+  display: none;
+}
+
+/* staged local image: thumbnail + 已选择 + 应用 */
+.stagedRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stagedThumb {
+  flex: none;
+  width: 40px;
+  height: 28px;
+  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border-radius: 6px;
+  background-color: var(--dsw-static-neutral-bluish-200, #fff);
+  overflow: hidden;
+}
+
+.stagedLabel {
+  flex: 1;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary, #77736d);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.urlRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.urlInput {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border-radius: 8px;
+  background: var(--dsw-static-neutral-bluish-200, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+
+.urlInput:focus {
+  outline: 2px solid var(--dsw-alias-state-business-primary, #6758d4);
+  outline-offset: -1px;
+}
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.swatch {
+  height: 40px;
+  padding: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.swatchActive {
+  outline: 2px solid var(--dsw-alias-state-business-primary, #6758d4);
+  outline-offset: -1px;
+}
+
+.sliderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.slider {
+  flex: 1;
+  accent-color: var(--dsw-alias-state-business-primary, #6758d4);
+}
+
+.sliderLabel {
+  flex: none;
+  width: 44px;
+  text-align: right;
+  color: var(--dsw-alias-label-secondary, #77736d);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+}
+
+.errorText {
+  margin-top: 6px;
+  color: var(--dsw-alias-state-error-primary, #cf5050);
+  font-size: 11px;
+  line-height: 1.5;
+}

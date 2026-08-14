@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "paths": {
+      "@deepseek-ai/cordis": ["D:/deepseek-harness/vendor/cordis/lib/types/index.d.ts"]
+    }
+  },
+  "include": ["src/client", "src/core"]
+}

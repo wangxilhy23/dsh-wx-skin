@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN" data-wx-skin-active>
+  <head>
+    <meta charset="utf-8" />
+    <title>dsh-wx-skin demo</title>
+    <style>
+      /* ---- theme tokens (light palette, mirror design-platform.css) ---- */
+      body {
+        --dsw-static-neutral-bluish-00: rgb(255, 255, 255);
+        --dsw-static-neutral-bluish-50: rgb(249, 250, 251);
+        --dsw-static-neutral-bluish-60: rgb(245, 246, 247);
+        --dsw-static-neutral-bluish-75: rgb(241, 243, 245);
+        --dsw-static-neutral-bluish-100: rgb(235, 238, 242);
+        --dsw-static-neutral-bluish-150: rgb(233, 236, 242);
+        --dsw-static-neutral-bluish-200: rgb(225, 229, 238);
+        --dsw-static-neutral-bluish-300: rgb(207, 211, 214);
+        --dsw-static-neutral-bluish-500: rgb(151, 157, 166);
+        --dsw-static-neutral-bluish-700: rgb(97, 102, 107);
+        --dsw-static-neutral-bluish-900: rgb(27, 27, 28);
+        --dsw-static-deepseek-50: rgb(237, 243, 254);
+        --dsw-static-deepseek-100: rgb(228, 237, 253);
+        --dsw-static-deepseek-200: rgb(211, 226, 255);
+        --dsw-static-deepseek-500: rgb(65, 118, 230);
+        --dsw-alias-bg-base: var(--dsw-static-neutral-bluish-00);
+        --dsw-alias-bg-layer-1: var(--dsw-static-neutral-bluish-00);
+        --dsw-alias-bg-layer-2: var(--dsw-static-neutral-bluish-00);
+        --dsw-alias-bg-layer-3: var(--dsw-static-neutral-bluish-00);
+        --dsw-alias-bg-overlay: var(--dsw-static-neutral-bluish-150);
+        --dsw-alias-bg-module-platform: var(--dsw-static-neutral-bluish-60);
+        --dsw-specific-sidebar-fill: var(--dsw-static-neutral-bluish-50);
+        --dsw-specific-input-major: var(--dsw-static-neutral-bluish-00);
+        --dsw-specific-bubble: var(--dsw-static-deepseek-50);
+        --dsw-alias-label-primary: rgb(27, 27, 28);
+        --dsw-alias-label-secondary: rgb(97, 102, 107);
+        --dsw-alias-label-caption: rgb(151, 157, 166);
+        --dsw-alias-state-business-primary: var(--dsw-static-deepseek-500);
+        --dsw-alias-interactive-bg-hover: rgba(0, 0, 0, 0.06);
+        --dsw-alias-interactive-bg-active: rgba(65, 118, 230, 0.12);
+        --dsw-alias-interactive-bg-hover-solid: var(--dsw-static-neutral-bluish-75);
+        --dsw-alias-border-l1: rgba(0, 0, 0, 0.04);
+        --dsw-alias-border-l2: rgba(0, 0, 0, 0.1);
+        --dsw-alias-markdown-code-block: var(--dsw-static-neutral-bluish-50);
+        --dsw-alias-markdown-inline-code: var(--dsw-static-neutral-bluish-100);
+        --dsw-alias-button-primary-fill: var(--dsw-static-deepseek-500);
+        --dsw-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      }
+      html, body { margin: 0; padding: 0; height: 100%; }
+      * { box-sizing: border-box; }
+      body { font-family: var(--dsw-font-family); }
+
+      /* ---- the skin global stylesheet (identical rules to global-skin-css.ts) ---- */
+      html[data-wx-skin-active] div[data-wx-skin-layer] {
+        position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        background-image: var(--wx-skin-bg-image, none);
+        background-color: var(--wx-skin-bg-color, transparent);
+        background-position: center; background-size: cover; background-repeat: no-repeat;
+        filter: blur(var(--wx-skin-blur, 0px));
+      }
+      html[data-wx-skin-active] div[data-wx-skin-layer]::after {
+        content: ''; position: absolute; inset: 0; background: var(--wx-skin-scrim, transparent);
+      }
+      html[data-wx-skin-active] body { background: transparent !important; }
+      html[data-wx-skin-active] #root { position: relative !important; z-index: 1 !important; }
+      html[data-wx-skin-active] body {
+        --dsw-alias-bg-base: rgb(255 255 255 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-alias-bg-layer-1: rgb(255 255 255 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-alias-bg-layer-2: rgb(255 255 255 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-alias-bg-layer-3: rgb(255 255 255 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-alias-bg-overlay: rgb(233 236 242 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-alias-bg-module-platform: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-specific-sidebar-fill: rgb(249 250 251 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-specific-input-major: rgb(255 255 255 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-specific-bubble: rgb(237 243 254 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-alias-markdown-code-block: rgb(249 250 251 / var(--wx-skin-surface, 0.72)) !important;
+        --dsw-alias-markdown-inline-code: rgb(235 238 242 / var(--wx-skin-surface, 0.72)) !important;
+      }
+
+      /* ---- simulated DSH shell ---- */
+      #root { height: 100vh; }
+      .frame { position: relative; display: flex; height: 100vh; background: var(--dsw-alias-bg-base); }
+      .sidebar {
+        width: 232px; flex: none; display: flex; flex-direction: column; gap: 4px;
+        padding: 12px 10px; background: var(--dsw-specific-sidebar-fill); color: var(--dsw-alias-label-primary);
+      }
+      .logoRow { display: flex; align-items: center; gap: 8px; padding: 4px 8px 10px; font-size: 14px; font-weight: 650; }
+      .logo { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, #4d6bfe, #a06bff); }
+      .newSession {
+        display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-bottom: 6px;
+        border: 0; border-radius: 9px; background: var(--dsw-alias-button-primary-fill); color: #fff;
+        font: inherit; font-size: 13px; cursor: pointer;
+      }
+      .nav { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--dsw-alias-label-secondary); }
+      .nav.active { background: var(--dsw-alias-interactive-bg-active); color: var(--dsw-alias-state-business-primary); }
+      .nav.dot::after { content: ''; width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--dsw-alias-state-business-primary); }
+      .sidebar .spacer { flex: 1; }
+      .skinEntry { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--dsw-alias-state-business-primary); background: var(--dsw-alias-interactive-bg-active); }
+
+      .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; font-size: 13px; color: var(--dsw-alias-label-primary); border-bottom: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); }
+      .topbar .title { font-weight: 650; }
+      .topbar .actions { display: flex; gap: 10px; color: var(--dsw-alias-label-caption); }
+      .chat { flex: 1; min-height: 0; overflow: hidden; padding: 22px 26px; }
+      .greet { font-size: 22px; font-weight: 700; color: var(--dsw-alias-label-primary); margin-bottom: 4px; }
+      .greetSub { font-size: 13px; color: var(--dsw-alias-label-secondary); margin-bottom: 20px; }
+      .msg { max-width: 78%; padding: 10px 14px; margin-bottom: 12px; border-radius: 12px; font-size: 14px; line-height: 1.65; color: var(--dsw-alias-label-primary); }
+      .msg.user { margin-left: auto; background: var(--dsw-alias-bg-layer-3); border: 1px solid var(--dsw-alias-border-l2); }
+      .msg.ai { background: var(--dsw-specific-bubble); }
+      .msg code { background: var(--dsw-alias-markdown-inline-code); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+      .msg pre { background: var(--dsw-alias-markdown-code-block); border: 1px solid var(--dsw-alias-border-l1); border-radius: 9px; padding: 10px 12px; font-size: 12.5px; overflow: hidden; }
+      .composer { padding: 12px 18px 16px; }
+      .composerBox {
+        display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+        border: 1px solid var(--dsw-alias-border-l2); border-radius: 13px;
+        background: var(--dsw-specific-input-major); color: var(--dsw-alias-label-caption); font-size: 13px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      }
+      .composerBox .send { margin-left: auto; width: 26px; height: 26px; border-radius: 8px; background: var(--dsw-alias-button-primary-fill); }
+      .right { width: 260px; flex: none; background: var(--dsw-alias-bg-layer-1); border-left: 1px solid var(--dsw-alias-border-l1); padding: 14px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+      .card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+      .card .t { color: var(--dsw-alias-label-primary); font-weight: 600; margin-bottom: 6px; }
+      .card .row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+      .card .row b { color: var(--dsw-alias-label-primary); font-weight: 600; }
+    </style>
+  </head>
+  <body style="--wx-skin-bg-image: linear-gradient(135deg, #0f2027 0%, #203a43 40%, #2c5364 70%, #185a9d 100%); --wx-skin-scrim: rgba(0,0,0,0.32); --wx-skin-blur: 0px; --wx-skin-surface: 0.72;">
+    <div data-wx-skin-layer></div>
+    <div id="root">
+      <div class="frame">
+        <aside class="sidebar">
+          <div class="logoRow"><span class="logo"></span><span>DeepSeek Harness</span></div>
+          <button class="newSession">＋ 新会话</button>
+          <div class="nav active">💬 会话</div>
+          <div class="nav">🗂️ 任务</div>
+          <div class="nav">🎨 图片浏览器</div>
+          <div class="spacer"></div>
+          <div class="skinEntry">🎨 皮肤</div>
+        </aside>
+        <main class="main">
+          <div class="topbar">
+            <span class="title">新会话</span>
+            <span class="actions">设置 · 插件 · 主题</span>
+          </div>
+          <div class="chat">
+            <div class="greet">你好，我是 DeepSeek</div>
+            <div class="greetSub">今天想让我帮你做点什么？</div>
+            <div class="msg ai">试试给 DSH 换一张背景图：点左侧「皮肤」→「选择图片」→「应用」，就能把任意图片变成全屏磨砂背景。<code>dsh-wx-skin</code> 支持本地图片与 URL。</div>
+            <div class="msg ai"><pre>pnpm dsh plugin --profile web add file:dsh-wx-skin-0.1.0.tgz</pre>一行命令即可安装。</div>
+            <div class="msg user">能把我的 4K 壁纸也应用上吗？</div>
+            <div class="msg ai">当然可以，图片大小没有限制；「透出」滑杆可以调节背景的明显程度，明暗主题也会自动适配。</div>
+          </div>
+          <div class="composer">
+            <div class="composerBox"><span>输入消息，Enter 发送…</span><span class="send"></span></div>
+          </div>
+        </main>
+        <aside class="right">
+          <div class="card"><div class="t">皮肤</div>
+            <div class="row"><span>背景</span><b>图片 / 渐变</b></div>
+            <div class="row"><span>透出</span><b>72%</b></div>
+            <div class="row"><span>暗化</span><b>35%</b></div>
+            <div class="row"><span>模糊</span><b>0px</b></div>
+          </div>
+          <div class="card"><div class="t">当前会话</div><div class="row"><span>模型</span><b>deepseek-chat</b></div></div>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>
