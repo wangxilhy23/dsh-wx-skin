@@ -79,7 +79,7 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings({ dim: 9, blur: 999, surface: 2 }).surface).toBe(1)
     expect(sanitizeSettings({ dim: -1, blur: -5, surface: 0 }).dim).toBe(0)
     expect(sanitizeSettings({ dim: -1, blur: -5, surface: 0 }).blur).toBe(0)
-    expect(sanitizeSettings({ dim: -1, blur: -5, surface: 0 }).surface).toBe(0.5)
+    expect(sanitizeSettings({ dim: -1, blur: -5, surface: 0 }).surface).toBe(0)
   })
 })
 

@@ -37,8 +37,8 @@ const SOURCES: readonly SkinSource[] = ['image', 'url', 'preset', 'none']
 
 const MAX_DIM = 0.8
 const MAX_BLUR = 24
-/** Surface opacity bounds (0.5..1). */
-export const MIN_SURFACE = 0.5
+/** Surface opacity bounds (0..1 — fully adjustable; readability is handled by the dim slider). */
+export const MIN_SURFACE = 0
 export const MAX_SURFACE = 1
 export const DEFAULT_SURFACE = 0.72
 
