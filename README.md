@@ -5,7 +5,7 @@
 ![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![npm version](https://img.shields.io/npm/v/dsh-wx-skin.svg)
 
-![效果预览](assets/demo.png)
+![效果预览](assets/demo1.png)
 
 > 上图为本插件实际效果演示(深蓝渐变壁纸透过半透明表面)。`assets/demo.html` 是自包含的演示源,可直接用浏览器打开预览。
 
