@@ -9,6 +9,7 @@ import {
   clamp,
   cssVariables,
   escapeCssUrl,
+  isDefaultSettings,
   loadSettings,
   sanitizeSettings,
   saveSettings,
@@ -106,6 +107,19 @@ describe('loadSettings / saveSettings', () => {
       setItem: (): void => { throw new DOMException('quota', 'QuotaExceededError') },
     }
     expect(saveSettings(enabledImage, storage)).toBe(false)
+  })
+})
+
+describe('isDefaultSettings', () => {
+  it('true for the pristine defaults', () => {
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS })).toBe(true)
+  })
+
+  it('false when any field deviates', () => {
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, enabled: true })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, source: 'preset', preset: '#000' })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, dim: 0.4 })).toBe(false)
+    expect(isDefaultSettings(enabledImage)).toBe(false)
   })
 })
 

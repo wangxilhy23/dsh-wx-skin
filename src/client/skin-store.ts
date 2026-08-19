@@ -123,6 +123,19 @@ export function clearSettings(storage: Pick<Storage, 'removeItem'> = globalThis.
   }
 }
 
+/** Whether the settings equal the pristine defaults (used to skip seeding the
+ * host copy from localStorage on the first run after upgrade). */
+export function isDefaultSettings(settings: SkinSettings): boolean {
+  return settings.enabled === DEFAULT_SETTINGS.enabled
+    && settings.source === DEFAULT_SETTINGS.source
+    && settings.imageDataUrl === DEFAULT_SETTINGS.imageDataUrl
+    && settings.url === DEFAULT_SETTINGS.url
+    && settings.preset === DEFAULT_SETTINGS.preset
+    && settings.dim === DEFAULT_SETTINGS.dim
+    && settings.blur === DEFAULT_SETTINGS.blur
+    && settings.surface === DEFAULT_SETTINGS.surface
+}
+
 /**
  * Project the settings onto the CSS custom properties the skin layer reads.
  * Returns an empty map when the skin is disabled (the applier then retracts

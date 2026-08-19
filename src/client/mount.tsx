@@ -10,7 +10,8 @@
 import { createRoot, type Root } from 'react-dom/client'
 import type { SkinSettings } from '../core/types.ts'
 import { SkinPanel } from './SkinPanel.tsx'
-import { ENTRY_ATTR, loadSettings, saveSettings } from './skin-store.ts'
+import { ENTRY_ATTR, isDefaultSettings, loadSettings, saveSettings } from './skin-store.ts'
+import { hostLoad, hostSave } from './skin-host.ts'
 import { SkinApplier, ensureGlobalCss, ensureLayer } from './skin-dom.ts'
 import css from './skin.module.css'
 
@@ -99,17 +100,29 @@ export function mountSkin(): () => void {
   applier.apply(latest)
 
   // Debounced persistence (slider drags must not rewrite the image data URL
-  // on every tick).
+  // on every tick). Writes both the localStorage cache/fallback and the
+  // durable host copy (deduped so an unchanged settings blob is not re-POSTed).
+  let lastSentHost: string | undefined
+  const syncHost = (): void => {
+    const serialized = JSON.stringify(latest)
+    if (lastSentHost === serialized) return
+    lastSentHost = serialized
+    void hostSave(latest)
+  }
+  const persist = (): void => {
+    saveSettings(latest)
+    syncHost()
+  }
   let saveTimer: number | undefined
   const flushSave = (): void => {
     if (saveTimer === undefined) return
     window.clearTimeout(saveTimer)
     saveTimer = undefined
-    saveSettings(latest)
+    persist()
   }
   const scheduleSave = (): void => {
     if (saveTimer !== undefined) window.clearTimeout(saveTimer)
-    saveTimer = window.setTimeout(() => { saveSettings(latest) }, 200)
+    saveTimer = window.setTimeout(() => { persist() }, 200)
   }
 
   // Sidebar entry.
@@ -125,6 +138,27 @@ export function mountSkin(): () => void {
   }
   setEntryActive(latest.enabled)
   disposers.push(mountEntrySelfHealing(entry))
+
+  // Server-side durability: the desktop app changes origin — and therefore its
+  // localStorage bucket — on every launch, so the durable copy lives in the
+  // DSH home via the host half. Sync once at mount: adopt the host copy when
+  // present, else seed it from localStorage on the first run after upgrade.
+  // Never throws into the GUI; any host failure keeps the localStorage path.
+  void (async () => {
+    try {
+      const host = await hostLoad()
+      if (host !== null) {
+        latest = host
+        applier.apply(host)
+        setEntryActive(host.enabled)
+        return
+      }
+      const local = loadSettings()
+      if (!isDefaultSettings(local)) void hostSave(local)
+    } catch {
+      // Swallow — the skin must never take the shell down.
+    }
+  })()
 
   // Popover host + React root.
   const panelHost = document.createElement('div')

@@ -22,7 +22,7 @@
   - 模糊 0–24px(背景毛玻璃);
   - **透出 0–100%**(表面不透明度,越低背景越明显,默认 72%;可读性由「暗化」配合)。
 - **启用开关 + 恢复默认**,一键关闭皮肤。
-- **持久化**:设置存于 `localStorage['dsh-wx-skin.settings']`,刷新、重启后自动恢复。
+- **持久化**:设置同时存于 `localStorage` 与宿主副本 `~/.dsh/dsh-wx-skin.settings.json`,刷新、重启、桌面端换端口后均自动恢复。
 - **明暗主题适配**:随 `body[data-ds-dark-theme]` 自动切换两套半透明配色。
 - **完全独立**:纯浏览器端 client 插件,不修改 DSH 仓库,不影响主界面与其它插件。
 
@@ -37,19 +37,19 @@
 插件已发布到 npm,一条命令装齐(在 **DSH 源码 checkout 目录**执行):
 
 ```sh
-pnpm dsh plugin --profile web add dsh-wx-skin@0.1.0
+pnpm dsh plugin --profile web add dsh-wx-skin@0.1.2
 # 若 `dsh` 已加入 PATH,也可直接:
-dsh plugin --profile web add dsh-wx-skin@0.1.0
+dsh plugin --profile web add dsh-wx-skin@0.1.2
 ```
 
 ### 方式二:使用发布包(tarball)
 
-下载 `dsh-wx-skin-0.1.0.tgz`(或通过 GitHub Releases 获取):
+下载 `dsh-wx-skin-0.1.2.tgz`(或通过 GitHub Releases 获取):
 
 ```sh
 pnpm dsh plugin --profile web add file:<tgz 的绝对路径>
 # 例如:
-pnpm dsh plugin --profile web add file:C:/Users/you/Downloads/dsh-wx-skin-0.1.0.tgz
+pnpm dsh plugin --profile web add file:C:/Users/you/Downloads/dsh-wx-skin-0.1.2.tgz
 ```
 
 ### 方式三:克隆源码构建(开发者)
@@ -104,6 +104,7 @@ pnpm dsh plugin --profile web remove dsh-wx-skin
 - **背景层**:注入全屏 `div[data-wx-skin-layer]`(`position: fixed; z-index: 0; pointer-events: none`),并将应用根 `#root` 抬到 `z-index: 1`。⚠️ 实测 **`z-index: -1` 的 fixed 图层在 DSH shell 中不绘制**(落在 canvas 背景之下),这是早期版本"能选图但背景不显示"的根因,故采用 `z-index: 0` + `#root` 抬升方案。
 - **半透明表面**:以独立 `<style>` + `!important` 覆盖十余个 alias 表面 token(`--dsw-alias-bg-*`、`--dsw-specific-*`、`--dsw-alias-markdown-*` 等),明暗两套值;透明度由 `--wx-skin-surface` 变量统一控制(不依赖 `color-mix()`,任意现代浏览器可用)。
 - **图片管线**:canvas 解码 → 编码为 JPEG data URL;原始分辨率 ≤4096px 时保持原样,更大或超出浏览器存储容量时静默缩小;编码结果做有效性校验,异常自动降档重编——**永不因图片大小报错**。
+- **宿主持久化**:`src/index.ts` 通过 `webServer` 服务注册 `/dsh-wx-skin/load` 与 `/dsh-wx-skin/save` 两条回环路由,把设置原子写入 DSH home(`$DSH_HOME` 或 `~/.dsh`)下的 `dsh-wx-skin.settings.json`;桌面端每次启动端口变化、localStorage 清空时,客户端自动从宿主副本恢复——背景图片跨会话不丢失。
 - **不依赖 `ctx.theme` 服务**:皮肤完全独立于 DSH 主题系统,关闭时样式惰性、默认主题不受影响。
 
 ---
@@ -115,7 +116,7 @@ npm install          # 安装依赖
 npm run typecheck    # tsc 类型检查(宿主 + 客户端)
 npm run test         # vitest 单元测试(skin-store / image-pipeline)
 npm run build        # tsc 宿主 lib + tsdown client bundle
-npm pack             # 产出发布包 dsh-wx-skin-0.1.0.tgz
+npm pack             # 产出发布包 dsh-wx-skin-<version>.tgz
 ```
 
 改完源码:`npm run build` → 重启 `dsh web` → 刷新页面。
@@ -130,13 +131,14 @@ dsh-wx-skin/
 │   ├── demo.png          # README 效果截图
 │   └── demo.html         # 自包含演示页(浏览器直接打开)
 ├── src/
-│   ├── index.ts          # 宿主半区:空 apply(占加载行)
+│   ├── index.ts          # 宿主半区:设置持久化路由(webServer → ~/.dsh)
 │   ├── core/types.ts     # 共享类型(SkinSettings)
 │   └── client/
 │       ├── index.ts      # 浏览器半区入口(apply)
 │       ├── mount.tsx     # 侧栏入口 + 弹出面板的 DOM 注入(自愈挂载)
 │       ├── SkinPanel.tsx # 设置面板(选图 / URL / 预设 / 滑杆 / 恢复默认)
-│       ├── skin-store.ts # 纯逻辑:默认值、持久化、预设、CSS 变量映射
+│       ├── skin-store.ts # 纯逻辑:默认值、localStorage、预设、CSS 变量映射
+│       ├── skin-host.ts  # 宿主副本读写(loopback fetch,可注入)
 │       ├── image-pipeline.ts # 图片 → 降采样 → data URL(依赖注入,可测)
 │       ├── skin-dom.ts   # 全局样式 / 背景层 / 应用到文档
 │       ├── global-skin-css.ts # 皮肤全局样式表(背景层 + 半透明表面 + 明暗适配)
@@ -151,7 +153,7 @@ dsh-wx-skin/
 ## 📋 兼容性与注意事项
 
 - **DSH 版本**:插件为纯浏览器端 + 单个 cordis 行,对 DSH 版本不敏感;但侧栏入口依赖 shell 的 DOM 结构(`[data-pane="sidebar"]` / `[class*="logoRow"]` / `[class*="newSession"]`)。若 DSH 版本变更导致入口未出现,只会记录日志、不影响 GUI,可反馈后调整选择器。
-- **存储**:本地图片以 data URL 存于 `localStorage`(单浏览器场景,足够背景图使用);超大图会自动缩放至可持久化尺寸。
+- **存储**:本地图片以 data URL 存于 `localStorage`(浏览器缓存/回退),并镜像到宿主副本 `~/.dsh/dsh-wx-skin.settings.json`(跨端口持久化);超大图会自动缩放至可持久化尺寸。
 - **格式**:仅接受位图(PNG / JPEG / WebP / GIF / BMP);SVG 等矢量格式不支持(canvas 管线只处理位图,安全可预测)。
 - **依赖 `#root`**:皮肤通过将应用根 `#root` 抬升到 `z-index: 1` 使背景层位于应用之下,请确保 shell 的挂载根仍为 `#root`(DSH 默认如此)。
 
