@@ -15,14 +15,15 @@ import { existsSync } from 'node:fs'
 import { basename, dirname, resolve as resolvePath, sep } from 'node:path'
 import { transform } from 'lightningcss'
 
-/** The module specifiers the running shell shares into the frozen module table. */
+/** The module specifiers the running shell shares into the frozen module table.
+ *  Mirrors packages/client/web/src/platform.ts in the DSH checkout — kept in
+ *  sync so a future @deepseek-ai/* import resolves against the real table. */
 const PLATFORM_MODULES = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-store',
   '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-web-react',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-ui-attachment',
-  '@deepseek-ai/dsh-client-schema-form',
+  '@deepseek-ai/dsh-client-ui-dockkit',
 ] as const
 
 /** Externals resolved from the loader module table. */
@@ -54,7 +55,6 @@ export default [{
   dts: false,
   sourcemap: true,
   clean: false,
-  external: [...CLIENT_EXTERNALS],
   // Browser bundles inline node-idiom deps (zustand/immer read
   // process.env.NODE_ENV and probe import.meta.env.MODE); the substitutions
   // below keep them working inside a CJS output.
@@ -63,9 +63,15 @@ export default [{
     'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
   },
-  // Anything not in the loader module table must inline (a require() the table
-  // cannot answer is a guaranteed runtime throw).
-  noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
+  // The loader module table answers only the platform specifiers above; a
+  // require() for anything else is a guaranteed runtime throw, so those stay
+  // external (deps.neverBundle) and everything else inlines (deps.alwaysBundle).
+  // Mirrors the official packages/client/tsdown.client.ts contract on the
+  // same tsdown version (0.22.2), replacing the deprecated external/noExternal.
+  deps: {
+    neverBundle: (id: string) => CLIENT_EXTERNALS.includes(id),
+    alwaysBundle: (id: string) => !CLIENT_EXTERNALS.includes(id),
+  },
   plugins: [{
     name: 'dsh-css-modules-inline',
     resolveId(source: string, importer: string | undefined) {

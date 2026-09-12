@@ -37,19 +37,19 @@
 插件已发布到 npm,一条命令装齐(在 **DSH 源码 checkout 目录**执行):
 
 ```sh
-pnpm dsh plugin --profile web add dsh-wx-skin@0.1.2
+pnpm dsh plugin --profile web add dsh-wx-skin@0.1.3
 # 若 `dsh` 已加入 PATH,也可直接:
-dsh plugin --profile web add dsh-wx-skin@0.1.2
+dsh plugin --profile web add dsh-wx-skin@0.1.3
 ```
 
 ### 方式二:使用发布包(tarball)
 
-下载 `dsh-wx-skin-0.1.2.tgz`(或通过 GitHub Releases 获取):
+下载 `dsh-wx-skin-0.1.3.tgz`(或通过 GitHub Releases 获取):
 
 ```sh
 pnpm dsh plugin --profile web add file:<tgz 的绝对路径>
 # 例如:
-pnpm dsh plugin --profile web add file:C:/Users/you/Downloads/dsh-wx-skin-0.1.2.tgz
+pnpm dsh plugin --profile web add file:C:/Users/you/Downloads/dsh-wx-skin-0.1.3.tgz
 ```
 
 ### 方式三:克隆源码构建(开发者)
@@ -100,7 +100,7 @@ pnpm dsh plugin --profile web remove dsh-wx-skin
 
 ## ⚙️ 工作原理
 
-- **形态**:外部 client 插件(参考 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) 模式)——`package.json` 声明 `dsh.client`(浏览器半区)+ `dsh.bundle.patch`(`cordis.patch.yml` 插入加载行),构建产物经 tsdown 输出为 `lib/client.js`,由 DSH 的 client-modules 在 `/plugins/dsh-wx-skin/client.js` 提供。
+- **形态**:外部 client 插件(参考 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) 模式)——`package.json` 声明 `dsh.client`(浏览器半区)+ `dsh.bundle.patch`(`cordis.patch.yml` 插入加载行),构建产物经 tsdown 输出为 `lib/client.js`,由 DSH 的 client-modules 经 `/plugins` 路由按 combo URL 提供(DSH 0.1.5 起,带 `rev` 内容哈希缓存)。
 - **背景层**:注入全屏 `div[data-wx-skin-layer]`(`position: fixed; z-index: 0; pointer-events: none`),并将应用根 `#root` 抬到 `z-index: 1`。⚠️ 实测 **`z-index: -1` 的 fixed 图层在 DSH shell 中不绘制**(落在 canvas 背景之下),这是早期版本"能选图但背景不显示"的根因,故采用 `z-index: 0` + `#root` 抬升方案。
 - **半透明表面**:以独立 `<style>` + `!important` 覆盖十余个 alias 表面 token(`--dsw-alias-bg-*`、`--dsw-specific-*`、`--dsw-alias-markdown-*` 等),明暗两套值;透明度由 `--wx-skin-surface` 变量统一控制(不依赖 `color-mix()`,任意现代浏览器可用)。
 - **图片管线**:canvas 解码 → 编码为 JPEG data URL;原始分辨率 ≤4096px 时保持原样,更大或超出浏览器存储容量时静默缩小;编码结果做有效性校验,异常自动降档重编——**永不因图片大小报错**。
@@ -152,7 +152,7 @@ dsh-wx-skin/
 
 ## 📋 兼容性与注意事项
 
-- **DSH 版本**:插件为纯浏览器端 + 单个 cordis 行,对 DSH 版本不敏感;但侧栏入口依赖 shell 的 DOM 结构(`[data-pane="sidebar"]` / `[class*="logoRow"]` / `[class*="newSession"]`)。若 DSH 版本变更导致入口未出现,只会记录日志、不影响 GUI,可反馈后调整选择器。
+- **DSH 版本**:适配基准为 DSH `0.1.5-rc.2`(2026-09-10)。插件为纯浏览器端 + 单个 cordis 行,对 DSH 版本不敏感;但侧栏入口依赖 shell 的 DOM 结构(`[class*="sidebarCol"]` / `[class*="logoRow"]` / `[class*="newSession"]`,CSS Modules 哈希命名保证子串可匹配)。若 DSH 版本变更导致入口未出现,只会记录日志、不影响 GUI,可反馈后调整选择器。
 - **存储**:本地图片以 data URL 存于 `localStorage`(浏览器缓存/回退),并镜像到宿主副本 `~/.dsh/dsh-wx-skin.settings.json`(跨端口持久化);超大图会自动缩放至可持久化尺寸。
 - **格式**:仅接受位图(PNG / JPEG / WebP / GIF / BMP);SVG 等矢量格式不支持(canvas 管线只处理位图,安全可预测)。
 - **依赖 `#root`**:皮肤通过将应用根 `#root` 抬升到 `z-index: 1` 使背景层位于应用之下,请确保 shell 的挂载根仍为 `#root`(DSH 默认如此)。

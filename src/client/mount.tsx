@@ -22,7 +22,7 @@ const ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke
 
 /** Locate the sidebar shell root, or undefined while not yet mounted. */
 function sidebarRoot(): HTMLElement | undefined {
-  const column = document.querySelector<HTMLElement>('[data-pane="sidebar"], [class*="sidebarCol"]')
+  const column = document.querySelector<HTMLElement>('[class*="sidebarCol"]')
   if (column === null) return undefined
   const logoOwner = column.querySelector<HTMLElement>('[class*="logoRow"]')?.parentElement
   return logoOwner ?? (column.firstElementChild as HTMLElement | undefined)
