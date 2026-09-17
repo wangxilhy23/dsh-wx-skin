@@ -1,24 +1,47 @@
 /**
  * dsh-wx-skin — DOM mounting: inject the global stylesheet and background
- * layer, place the sidebar 「皮肤」 entry (self-healing across shell
- * re-renders), and toggle an anchored popover with the settings panel. All
- * mount failures are logged, never thrown (the shell fails boot when a plugin
- * apply throws). Persists settings with a short debounce so slider drags do
- * not hammer localStorage with the image data URL.
+ * layer, place the sidebar entries (「皮肤」 and 「下一张」, self-healing across
+ * shell re-renders), and toggle an anchored popover with the settings panel.
+ * All mount failures are logged, never thrown (the shell fails boot when a
+ * plugin apply throws). Persists settings with a short debounce so slider drags
+ * do not hammer localStorage with the image data URL.
+ *
+ * Settings are owned here: the panel is controlled by `latest`, and every
+ * mutation — panel control, preset, or a slideshow switch from either entry —
+ * goes through one `commitSettings` so the panel, the entries, the document,
+ * and the persisted copies can never disagree.
  * @module dsh-wx-skin/client/mount
  */
 import { createRoot, type Root } from 'react-dom/client'
 import type { SkinSettings } from '../core/types.ts'
 import { SkinPanel } from './SkinPanel.tsx'
-import { ENTRY_ATTR, isDefaultSettings, loadSettings, saveSettings } from './skin-store.ts'
+import { advanceFolder, folderStatus, imageUrl } from './skin-folder.ts'
+import type { PickerBridge } from './skin-picker.ts'
+import { ENTRY_ATTR, currentImageLabel, isDefaultSettings, loadSettings, saveSettings } from './skin-store.ts'
 import { hostLoad, hostSave } from './skin-host.ts'
-import { SkinApplier, ensureGlobalCss, ensureLayer } from './skin-dom.ts'
+import { SkinApplier, ensureGlobalCss, ensureLayer, teardownSkinDom } from './skin-dom.ts'
 import css from './skin.module.css'
 
 const PANEL_ATTR = 'data-wx-skin-panel'
 const PANEL_WIDTH = 300
 
-const ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 2v2.2M8 11.8V14M2 8h2.2M11.8 8H14M4 4l1.6 1.6M10.4 10.4 12 12M12 4l-1.6 1.6M5.6 10.4 4 12"/></svg>'
+const SKIN_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 2v2.2M8 11.8V14M2 8h2.2M11.8 8H14M4 4l1.6 1.6M10.4 10.4 12 12M12 4l-1.6 1.6M5.6 10.4 4 12"/></svg>'
+const NEXT_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9"/><path d="M8.5 4.5 12 8l-3.5 3.5"/></svg>'
+
+/** Mount options supplied by the browser half entry. */
+export interface MountOptions {
+  /**
+   * Live bridge to the harness directory picker. The service behind it appears
+   * only after the client↔host connection is up, so `available()` is asked on
+   * every render instead of being snapshotted here.
+   */
+  picker?: PickerBridge
+  /**
+   * Subscribe to picker availability changes; returns an unsubscriber. Lets the
+   * open panel light its 「选择文件夹」 button up without reopening.
+   */
+  onPickerChange?: (listener: () => void) => (() => void) | void
+}
 
 /** Locate the sidebar shell root, or undefined while not yet mounted. */
 function sidebarRoot(): HTMLElement | undefined {
@@ -38,8 +61,17 @@ function newSessionButton(root: HTMLElement): HTMLButtonElement | undefined {
   return undefined
 }
 
-/** Keep the entry in the sidebar, re-placing it across shell re-renders. */
-function mountEntrySelfHealing(entry: HTMLButtonElement): () => void {
+/**
+ * Keep the entry in the sidebar, re-placing it across shell re-renders.
+ * @param entry - the injected button.
+ * @param previous - entry to sit after when it is still mounted (keeps the
+ * injected entries in a stable order under the New Session button).
+ * @returns disposer removing the entry and its observers.
+ */
+function mountEntrySelfHealing(
+  entry: HTMLButtonElement,
+  previous?: () => HTMLButtonElement | undefined,
+): () => void {
   let root: HTMLElement | undefined
   let placed = false
   let rootObserver: MutationObserver | undefined
@@ -58,7 +90,8 @@ function mountEntrySelfHealing(entry: HTMLButtonElement): () => void {
     }
     root ??= sidebarRoot()
     if (root === undefined) return
-    const anchor = newSessionButton(root)
+    const preferred = previous?.()
+    const anchor = preferred !== undefined && root.contains(preferred) ? preferred : newSessionButton(root)
     if (anchor === undefined) return
     if (entry.parentElement !== root) root.insertBefore(entry, anchor.nextElementSibling)
     placed = true
@@ -86,11 +119,24 @@ function mountEntrySelfHealing(entry: HTMLButtonElement): () => void {
   }
 }
 
+/** Build one sidebar entry button. */
+function createEntry(label: string, icon: string, role: string): HTMLButtonElement {
+  const entry = document.createElement('button')
+  entry.type = 'button'
+  entry.setAttribute(ENTRY_ATTR, '')
+  entry.dataset.wxSkinEntryRole = role
+  entry.className = css.entry
+  entry.setAttribute('aria-label', label)
+  entry.innerHTML = `<span class="${css.entryIcon}">${icon}</span><span class="${css.entryLabel}">${label}</span>`
+  return entry
+}
+
 /**
  * Mount the skin feature into the web shell.
- * @returns disposer tearing down the entry, popover, layer, and stylesheet.
+ * @param options - host capabilities handed in by the browser half entry.
+ * @returns disposer tearing down the entries, popover, layer, and stylesheet.
  */
-export function mountSkin(): () => void {
+export function mountSkin(options: MountOptions = {}): () => void {
   const disposers: Array<() => void> = []
   ensureGlobalCss()
   ensureLayer()
@@ -125,40 +171,38 @@ export function mountSkin(): () => void {
     saveTimer = window.setTimeout(() => { persist() }, 200)
   }
 
-  // Sidebar entry.
-  const entry = document.createElement('button')
-  entry.type = 'button'
-  entry.setAttribute(ENTRY_ATTR, '')
-  entry.className = css.entry
-  entry.setAttribute('aria-label', '皮肤')
-  entry.innerHTML = `<span class="${css.entryIcon}">${ICON}</span><span class="${css.entryLabel}">皮肤</span>`
+  // Sidebar entries: 「皮肤」 opens the panel; 「下一张」 advances the slideshow.
+  const entry = createEntry('皮肤', SKIN_ICON, 'skin')
+  const nextEntry = createEntry('下一张', NEXT_ICON, 'next')
   const setEntryActive = (active: boolean): void => {
     if (active) entry.dataset.active = 'true'
     else delete entry.dataset.active
   }
+  const setNextEntryState = (settings: SkinSettings): void => {
+    const status = folderStatus(settings)
+    if (status.total === 0) {
+      nextEntry.dataset.empty = 'true'
+      nextEntry.setAttribute('aria-disabled', 'true')
+      nextEntry.title = '先加载图片文件夹'
+    } else {
+      delete nextEntry.dataset.empty
+      nextEntry.removeAttribute('aria-disabled')
+      const name = currentImageLabel(settings)
+      nextEntry.title = `${settings.orderMode === 'random' ? '随机' : '顺序'}下一张 · 第 ${status.position}/${status.total} 张`
+        + (name === null ? '' : ` · ${name.label}`)
+    }
+  }
   setEntryActive(latest.enabled)
+  setNextEntryState(latest)
+  disposers.push(mountEntrySelfHealing(nextEntry, () => entry))
   disposers.push(mountEntrySelfHealing(entry))
 
   // Server-side durability: the desktop app changes origin — and therefore its
   // localStorage bucket — on every launch, so the durable copy lives in the
-  // DSH home via the host half. Sync once at mount: adopt the host copy when
-  // present, else seed it from localStorage on the first run after upgrade.
-  // Never throws into the GUI; any host failure keeps the localStorage path.
-  void (async () => {
-    try {
-      const host = await hostLoad()
-      if (host !== null) {
-        latest = host
-        applier.apply(host)
-        setEntryActive(host.enabled)
-        return
-      }
-      const local = loadSettings()
-      if (!isDefaultSettings(local)) void hostSave(local)
-    } catch {
-      // Swallow — the skin must never take the shell down.
-    }
-  })()
+  // DSH home via the host half. Seen at the end of the mount below: adopt the
+  // host copy when present, else seed it from localStorage on the first run
+  // after upgrade. Never throws into the GUI; any host failure keeps the
+  // localStorage path.
 
   // Popover host + React root.
   const panelHost = document.createElement('div')
@@ -174,6 +218,21 @@ export function mountSkin(): () => void {
     panelHost.style.top = `${top}px`
   }
 
+  /** Render (or re-render) the controlled panel against the current settings. */
+  const renderPanel = (): void => {
+    root?.render(<SkinPanel
+      settings={latest}
+      commit={commitSettings}
+      onClose={closePanel}
+      picker={options.picker}
+      onNext={nextImage}
+    />)
+  }
+
+  // The harness picker service arrives later than this mount; re-render the
+  // open panel so its button becomes clickable without reopening.
+  const offPicker = options.onPickerChange?.(() => { renderPanel() })
+
   const closePanel = (): void => {
     if (root === undefined) return
     flushSave()
@@ -187,20 +246,64 @@ export function mountSkin(): () => void {
     positionPopover()
     document.body.appendChild(panelHost)
     root = createRoot(panelHost)
-    root.render(<SkinPanel
-      initial={latest}
-      onClose={closePanel}
-      commit={(next) => {
-        latest = next
-        applier.apply(next)
-        setEntryActive(next.enabled)
-        scheduleSave()
-      }}
-    />)
+    renderPanel()
+  }
+
+  /** Every settings change goes through here. */
+  const commitSettings = (next: SkinSettings): void => {
+    latest = next
+    applier.apply(next)
+    setEntryActive(next.enabled)
+    setNextEntryState(next)
+    scheduleSave()
+    renderPanel()
+  }
+
+  /**
+   * Warm the browser cache for the image the next click will show (sequential
+   * mode is deterministic; random mode draws fresh, so it is not preloaded).
+   */
+  const preloadNext = (current: SkinSettings): void => {
+    if (current.orderMode !== 'sequential' || current.folderImages.length < 2) return
+    const projected = advanceFolder(current)
+    const candidate = projected.folderImages[projected.currentIndex]
+    const shown = current.folderImages[current.currentIndex]
+    if (candidate === undefined || shown?.path === candidate.path) return
+    const image = new Image()
+    image.src = imageUrl(candidate)
+  }
+
+  /**
+   * Advance the slideshow by one image. With no folder loaded there is nothing
+   * to switch to, and a click must never open anything (no panel, no dialog):
+   * the sidebar entry is rendered as unavailable instead.
+   */
+  const nextImage = (): void => {
+    if (latest.folderImages.length === 0) return
+    const advanced = advanceFolder(latest)
+    commitSettings(advanced)
+    preloadNext(advanced)
   }
 
   const togglePanel = (): void => { if (root !== undefined) closePanel(); else openPanel() }
   entry.addEventListener('click', togglePanel)
+  nextEntry.addEventListener('click', nextImage)
+
+  // Adopt the durable host copy once the mount is wired (a later arrival is
+  // applied through the same single commit path as any UI change).
+  void (async () => {
+    try {
+      const host = await hostLoad()
+      if (host !== null) {
+        commitSettings(host)
+        return
+      }
+      const local = loadSettings()
+      if (!isDefaultSettings(local)) void hostSave(local)
+    } catch {
+      // Swallow — the skin must never take the shell down.
+    }
+  })()
 
   // Close on outside click, Escape, or window resize.
   const onDocMouseDown = (event: MouseEvent): void => {
@@ -227,9 +330,8 @@ export function mountSkin(): () => void {
 
   return () => {
     closePanel()
+    offPicker?.()
     for (const dispose of disposers.splice(0)) dispose()
-    document.querySelector<HTMLElement>(`div[data-wx-skin-layer]`)?.remove()
-    document.querySelector<HTMLElement>(`style[data-plugin-css="dsh-wx-skin/global"]`)?.remove()
-    applier.apply({ ...latest, enabled: false })
+    teardownSkinDom()
   }
 }

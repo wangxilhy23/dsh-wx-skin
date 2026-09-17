@@ -8,14 +8,17 @@ import {
   STORAGE_KEY,
   clamp,
   cssVariables,
+  currentImageLabel,
   escapeCssUrl,
   isDefaultSettings,
   loadSettings,
+  sanitizeFolderImages,
   sanitizeSettings,
   saveSettings,
+  urlBasename,
   type SkinPreset,
 } from '../src/client/skin-store.ts'
-import type { SkinSettings } from '../src/core/types.ts'
+import type { SkinFolderImage, SkinSettings } from '../src/core/types.ts'
 
 function fakeStorage(initial: Record<string, string> = {}): {
   store: Record<string, string>
@@ -33,14 +36,10 @@ function fakeStorage(initial: Record<string, string> = {}): {
 }
 
 const enabledImage: SkinSettings = {
+  ...DEFAULT_SETTINGS,
   enabled: true,
   source: 'image',
   imageDataUrl: 'data:image/jpeg;base64,AAAA',
-  url: null,
-  preset: null,
-  dim: 0.35,
-  blur: 0,
-  surface: 0.72,
 }
 
 describe('sanitizeSettings', () => {
@@ -119,7 +118,95 @@ describe('isDefaultSettings', () => {
     expect(isDefaultSettings({ ...DEFAULT_SETTINGS, enabled: true })).toBe(false)
     expect(isDefaultSettings({ ...DEFAULT_SETTINGS, source: 'preset', preset: '#000' })).toBe(false)
     expect(isDefaultSettings({ ...DEFAULT_SETTINGS, dim: 0.4 })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, imageName: 'wall.png' })).toBe(false)
     expect(isDefaultSettings(enabledImage)).toBe(false)
+  })
+})
+
+describe('currentImageLabel', () => {
+  const folderImage = (name: string): SkinFolderImage => ({
+    path: `D:\\pics\\${name}`,
+    name,
+    rel: name,
+    size: 1,
+    mtimeMs: 2,
+  })
+
+  it('names the shown folder image and offers the full path as detail', () => {
+    const settings: SkinSettings = {
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      source: 'folder',
+      folderPath: 'D:\\pics',
+      folderImages: [folderImage('a.png'), folderImage('demo1.png')],
+      currentIndex: 1,
+    }
+    expect(currentImageLabel(settings)).toEqual({ label: 'demo1.png', detail: 'D:\\pics\\demo1.png' })
+  })
+
+  it('reports nothing for a folder index that matches no image', () => {
+    const settings: SkinSettings = {
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      source: 'folder',
+      folderImages: [folderImage('a.png')],
+      currentIndex: -1,
+    }
+    expect(currentImageLabel(settings)).toBeNull()
+  })
+
+  it('names a picked local image by its file name', () => {
+    const named: SkinSettings = { ...DEFAULT_SETTINGS, enabled: true, source: 'image', imageName: 'my wallpaper.jpg' }
+    expect(currentImageLabel(named)).toEqual({ label: 'my wallpaper.jpg', detail: 'my wallpaper.jpg' })
+    // Older settings carry no name; the source is still labelled.
+    const anonymous: SkinSettings = { ...DEFAULT_SETTINGS, enabled: true, source: 'image', imageDataUrl: 'data:image/png;base64,AA' }
+    expect(currentImageLabel(anonymous)).toEqual({ label: '本地图片', detail: '本地图片' })
+  })
+
+  it('names a URL by its last path segment, with the URL as detail', () => {
+    const settings: SkinSettings = {
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      source: 'url',
+      url: 'https://example.com/walls/%E6%B7%B1%E6%B5%B7.jpg?w=1920#top',
+    }
+    expect(currentImageLabel(settings)).toEqual({
+      label: '深海.jpg',
+      detail: 'https://example.com/walls/%E6%B7%B1%E6%B5%B7.jpg?w=1920#top',
+    })
+  })
+
+  it('names a preset by its catalog label', () => {
+    const settings: SkinSettings = {
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      source: 'preset',
+      preset: PRESETS[0]?.value ?? '',
+    }
+    expect(currentImageLabel(settings)).toEqual({ label: PRESETS[0]?.label, detail: PRESETS[0]?.value })
+  })
+
+  it('reports nothing while the skin is off or no source is set', () => {
+    expect(currentImageLabel({ ...DEFAULT_SETTINGS })).toBeNull()
+    expect(currentImageLabel({ ...DEFAULT_SETTINGS, enabled: false, source: 'folder', folderImages: [folderImage('a.png')], currentIndex: 0 })).toBeNull()
+    expect(currentImageLabel({ ...DEFAULT_SETTINGS, enabled: true, source: 'url', url: null })).toBeNull()
+  })
+})
+
+describe('urlBasename', () => {
+  it('keeps the last segment and drops query/hash', () => {
+    expect(urlBasename('https://host/a/b/photo.png?x=1#y')).toBe('photo.png')
+  })
+
+  it('falls back to the host for a bare origin', () => {
+    expect(urlBasename('https://host/')).toBe('host')
+  })
+
+  it('never throws on malformed or relative input', () => {
+    // A pasted Windows path is a realistic mistake in the URL box.
+    expect(urlBasename('C:\\walls\\deep sea.png')).toBe('deep sea.png')
+    expect(urlBasename('not a url/')).toBe('not a url')
+    expect(urlBasename('https://host/%E0%A4%A')).toBe('%E0%A4%A')
   })
 })
 
@@ -148,6 +235,81 @@ describe('cssVariables', () => {
     const solid = cssVariables({ ...enabledImage, source: 'preset', preset: '#1f2a44' })
     expect(solid['--wx-skin-bg-color']).toBe('#1f2a44')
     expect(solid['--wx-skin-bg-image']).toBeUndefined()
+  })
+})
+
+describe('folder settings', () => {
+  const image = (name: string, mtimeMs = 1000): SkinFolderImage => ({
+    path: `D:\\pics\\${name}`,
+    name,
+    rel: name,
+    size: 10,
+    mtimeMs,
+  })
+
+  it('sanitizes the cached list: shape, dedupe, cap', () => {
+    const out = sanitizeFolderImages([
+      image('a.png'),
+      { path: '', name: 'x' },
+      { path: 'D:\\pics\\a.png', name: 'dup' },
+      null,
+      { path: 'D:\\pics\\b.jpg', name: 'b.jpg', rel: 'b.jpg', size: 'big', mtimeMs: Number.NaN },
+    ])
+    expect(out).toHaveLength(2)
+    expect(out.map(entry => entry.path)).toEqual(['D:\\pics\\a.png', 'D:\\pics\\b.jpg'])
+    // Non-numeric metadata degrades to zero instead of poisoning the entry.
+    expect(out[1]).toMatchObject({ size: 0, mtimeMs: 0 })
+    expect(sanitizeFolderImages('nope')).toEqual([])
+  })
+
+  it('keeps folder fields and aligns the index and used record with the list', () => {
+    const out = sanitizeSettings({
+      source: 'folder',
+      enabled: true,
+      folderPath: 'D:\\pics',
+      folderImages: [image('a.png'), image('b.png')],
+      orderMode: 'random',
+      currentIndex: 7,
+      usedPaths: ['D:\\pics\\a.png', 'D:\\pics\\gone.png', 42],
+    })
+    expect(out.source).toBe('folder')
+    expect(out.folderPath).toBe('D:\\pics')
+    expect(out.orderMode).toBe('random')
+    // Out-of-range index reads as "nothing shown" rather than throwing later.
+    expect(out.currentIndex).toBe(-1)
+    // Only paths still present in the cached list survive.
+    expect(out.usedPaths).toEqual(['D:\\pics\\a.png'])
+  })
+
+  it('falls back to sequential and clears folder state from junk', () => {
+    const out = sanitizeSettings({ orderMode: 'shuffle', folderPath: 5, folderImages: {} })
+    expect(out.orderMode).toBe('sequential')
+    expect(out.folderPath).toBeNull()
+    expect(out.folderImages).toEqual([])
+    expect(out.currentIndex).toBe(-1)
+    expect(out.usedPaths).toEqual([])
+  })
+
+  it('treats any folder state as non-default', () => {
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, folderPath: 'D:\\pics' })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, folderImages: [image('a.png')] })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, usedPaths: ['D:\\pics\\a.png'] })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, orderMode: 'random' })).toBe(false)
+  })
+
+  it('projects the current folder image through the host route', () => {
+    const settings: SkinSettings = {
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      source: 'folder',
+      folderPath: 'D:\\pics',
+      folderImages: [image('a b.png', 42), image('c.png', 43)],
+      currentIndex: 1,
+    }
+    const vars = cssVariables(settings)
+    expect(vars['--wx-skin-bg-image']).toBe('url("/dsh-wx-skin/image?p=D%3A%5Cpics%5Cc.png&v=43")')
+    // No image picked (empty folder) leaves the background unset.
+    expect(cssVariables({ ...settings, folderImages: [], currentIndex: -1 })['--wx-skin-bg-image']).toBeUndefined()
   })
 })
 

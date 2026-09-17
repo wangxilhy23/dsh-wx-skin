@@ -1,6 +1,28 @@
-/* dsh-wx-skin panel + sidebar entry styles (CSS Modules; compiled + injected by the client bundle). */
+/* dsh-wx-skin panel + sidebar entry styles (CSS Modules; compiled + injected by the client bundle).
+ *
+ * Two color planes, deliberately separate:
+ *
+ * 1. The sidebar entry (.entry*) lives INSIDE the shell sidebar, so it reads
+ *    the theme alias tokens and follows the GUI theme like its neighbours.
+ *
+ * 2. The settings panel is a body-level popover with its own OPAQUE surface, so
+ *    it must not read alias tokens at all: `--dsw-alias-label-primary` inverts
+ *    to near-white in the dark theme while the panel surface stays light, which
+ *    is exactly the "light text on a light panel" defect this layer fixes.
+ *    Instead the panel declares a semantic `--wx-panel-*` set (light defaults)
+ *    and re-declares it under `body[data-ds-dark-theme]`. Every value keeps the
+ *    literal equivalent of its static token as the var() fallback (the
+ *    `--dsw-static-*` tokens are theme-invariant), and `color-scheme` keeps the
+ *    native controls — range track/thumb, checkbox, panel scrollbar — in the
+ *    same scheme as the panel they sit on.
+ *
+ * RULE: everything below the panel marker comment must never reference
+ * `--dsw-alias-*` again. tests/panel-theme.spec.ts enforces it, together with
+ * the contrast of the two palettes.
+ */
 
 /* ---- sidebar entry row (injected DOM, mirrors the shell's nav-row look) ---- */
+
 .entry {
   display: flex;
   align-items: center;
@@ -26,6 +48,10 @@
   color: var(--dsw-alias-state-business-primary, #6758d4);
 }
 
+.entry[data-empty='true'] {
+  opacity: 0.55;
+}
+
 .entryIcon {
   display: inline-flex;
   flex: none;
@@ -42,20 +68,51 @@
 }
 
 /* ---- popover panel ---- */
+
 .panel {
+  /* Light palette (defaults). Literal fallbacks mirror the --dsw-static-* tokens. */
+  --wx-panel-bg: var(--dsw-static-neutral-bluish-100, #ebedf2);
+  --wx-panel-fg: var(--dsw-static-neutral-bluish-1000, #0f1115);
+  --wx-panel-fg-muted: var(--dsw-static-neutral-bluish-700, #61666b);
+  --wx-panel-border: var(--dsw-static-neutral-bluish-400, #adb2b8);
+  --wx-panel-control-bg: var(--dsw-static-neutral-00, #ffffff);
+  --wx-panel-control-hover: var(--dsw-static-neutral-bluish-200, #e1e5ee);
+  --wx-panel-accent: var(--dsw-static-deepseek-500, #4176e6);
+  --wx-panel-accent-fill: var(--dsw-static-deepseek-600, #4868b2);
+  --wx-panel-accent-fill-fg: var(--dsw-static-neutral-00, #ffffff);
+  --wx-panel-danger: var(--dsw-static-red-900, #570c0c);
+  --wx-panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  color-scheme: light;
+
   box-sizing: border-box;
   width: 300px;
   max-height: min(80vh, 560px);
   overflow-y: auto;
   padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border: 1px solid var(--wx-panel-border);
   border-radius: 10px;
-  /* Opaque static palette (the skin never overrides static tokens), so the
-     panel stays readable over any background. */
-  background: var(--dsw-static-neutral-bluish-100, #fff);
-  color: var(--dsw-alias-label-primary, #26231f);
+  /* Opaque palette (never the skin's translucent surface tokens), so the panel
+     stays readable over any wallpaper and in either document theme. */
+  background: var(--wx-panel-bg);
+  color: var(--wx-panel-fg);
   font-size: 12px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--wx-panel-shadow);
+}
+
+/* Dark palette: same semantic names, read by the panel only. */
+body[data-ds-dark-theme] .panel {
+  --wx-panel-bg: var(--dsw-static-neutral-bluish-850, #2c2c2e);
+  --wx-panel-fg: var(--dsw-static-neutral-bluish-50, #f9fafb);
+  --wx-panel-fg-muted: var(--dsw-static-neutral-bluish-400, #adb2b8);
+  --wx-panel-border: var(--dsw-static-neutral-bluish-700, #61666b);
+  --wx-panel-control-bg: var(--dsw-static-neutral-bluish-800, #353638);
+  --wx-panel-control-hover: var(--dsw-static-neutral-bluish-750, #43454a);
+  --wx-panel-accent: var(--dsw-static-deepseek-400, #679efe);
+  --wx-panel-accent-fill: var(--dsw-static-deepseek-450, #5686fe);
+  --wx-panel-accent-fill-fg: var(--dsw-static-neutral-bluish-1000, #0f1115);
+  --wx-panel-danger: var(--dsw-static-red-100, #fee2e2);
+  --wx-panel-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
 }
 
 .header {
@@ -70,7 +127,7 @@
 .close {
   border: 0;
   background: transparent;
-  color: var(--dsw-alias-label-secondary, #77736d);
+  color: var(--wx-panel-fg-muted);
   font: inherit;
   font-size: 16px;
   line-height: 1;
@@ -80,7 +137,8 @@
 }
 
 .close:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
+  background: var(--wx-panel-control-hover);
+  color: var(--wx-panel-fg);
 }
 
 .toggleRow {
@@ -91,7 +149,7 @@
 }
 
 .toggleRow input {
-  accent-color: var(--dsw-alias-state-business-primary, #6758d4);
+  accent-color: var(--wx-panel-accent);
 }
 
 .preview {
@@ -100,17 +158,28 @@
   height: 72px;
   box-sizing: border-box;
   margin-bottom: 6px;
-  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border: 1px solid var(--wx-panel-border);
   border-radius: 8px;
+  background-color: var(--wx-panel-control-bg);
   background-position: center;
   background-size: cover;
-  color: var(--dsw-alias-label-secondary, #77736d);
+  color: var(--wx-panel-fg-muted);
   overflow: hidden;
 }
 
 .currentBadge {
   margin-bottom: 10px;
-  color: var(--dsw-alias-label-secondary, #77736d);
+  color: var(--wx-panel-fg-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Name of the image currently on screen; the full path/URL rides the title. */
+.imageName {
+  margin: -4px 0 10px;
+  color: var(--wx-panel-fg);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,18 +188,19 @@
 
 .section {
   margin: 10px 0 6px;
-  color: var(--dsw-alias-label-secondary, #77736d);
+  color: var(--wx-panel-fg-muted);
   font-size: 11px;
+  font-weight: 600;
 }
 
 .button {
   height: 30px;
   padding: 0 12px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border: 1px solid var(--wx-panel-border);
   border-radius: 8px;
-  background: var(--dsw-static-neutral-bluish-200, #fff);
-  color: inherit;
+  background: var(--wx-panel-control-bg);
+  color: var(--wx-panel-fg);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -138,7 +208,7 @@
 }
 
 .button:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
+  background: var(--wx-panel-control-hover);
 }
 
 .button:disabled {
@@ -148,9 +218,17 @@
 
 .buttonPrimary {
   composes: button;
-  border-color: var(--dsw-alias-state-business-primary, #6758d4);
-  background: var(--dsw-alias-state-business-primary, #6758d4);
-  color: #fff;
+  border-color: var(--wx-panel-accent-fill);
+  background: var(--wx-panel-accent-fill);
+  color: var(--wx-panel-accent-fill-fg);
+}
+
+/* Must follow `.button:hover`: same specificity (0-2-0), so declaration order
+   decides — otherwise the shared hover fill would repaint the primary button
+   and leave its label unreadable. */
+.buttonPrimary:hover {
+  background: var(--wx-panel-accent-fill);
+  filter: brightness(1.08);
 }
 
 .fileInput {
@@ -169,16 +247,16 @@
   flex: none;
   width: 40px;
   height: 28px;
-  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border: 1px solid var(--wx-panel-border);
   border-radius: 6px;
-  background-color: var(--dsw-static-neutral-bluish-200, #fff);
+  background-color: var(--wx-panel-control-bg);
   overflow: hidden;
 }
 
 .stagedLabel {
   flex: 1;
   min-width: 0;
-  color: var(--dsw-alias-label-secondary, #77736d);
+  color: var(--wx-panel-fg-muted);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -191,22 +269,130 @@
   margin-bottom: 4px;
 }
 
+/* ---- source-family dropdown ---- */
+
+.select {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--wx-panel-border);
+  border-radius: 8px;
+  background: var(--wx-panel-control-bg);
+  color: var(--wx-panel-fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ---- folder slideshow controls ---- */
+
+.folderRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.inlineToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--wx-panel-fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.inlineToggle input {
+  accent-color: var(--wx-panel-accent);
+}
+
+.segmented {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--wx-panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segBtn {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--wx-panel-control-bg);
+  color: var(--wx-panel-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.segBtn + .segBtn {
+  border-left: 1px solid var(--wx-panel-border);
+}
+
+.segBtn:hover {
+  background: var(--wx-panel-control-hover);
+}
+
+.segBtnActive {
+  background: var(--wx-panel-accent-fill);
+  color: var(--wx-panel-accent-fill-fg);
+}
+
+.segBtnActive:hover {
+  background: var(--wx-panel-accent-fill);
+  filter: brightness(1.08);
+}
+
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--wx-panel-fg-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--wx-panel-accent);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.noticeText {
+  margin-top: 6px;
+  color: var(--wx-panel-fg-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .urlInput {
   flex: 1;
   min-width: 0;
   height: 30px;
   padding: 0 10px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border: 1px solid var(--wx-panel-border);
   border-radius: 8px;
-  background: var(--dsw-static-neutral-bluish-200, #fff);
-  color: inherit;
+  background: var(--wx-panel-control-bg);
+  color: var(--wx-panel-fg);
   font: inherit;
   font-size: 12px;
 }
 
+.urlInput::placeholder {
+  color: var(--wx-panel-fg-muted);
+  opacity: 1;
+}
+
 .urlInput:focus {
-  outline: 2px solid var(--dsw-alias-state-business-primary, #6758d4);
+  outline: 2px solid var(--wx-panel-accent);
   outline-offset: -1px;
 }
 
@@ -221,13 +407,13 @@
   height: 40px;
   padding: 0;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border: 1px solid var(--wx-panel-border);
   border-radius: 8px;
   cursor: pointer;
 }
 
 .swatchActive {
-  outline: 2px solid var(--dsw-alias-state-business-primary, #6758d4);
+  outline: 2px solid var(--wx-panel-accent);
   outline-offset: -1px;
 }
 
@@ -240,14 +426,16 @@
 
 .slider {
   flex: 1;
-  accent-color: var(--dsw-alias-state-business-primary, #6758d4);
+  accent-color: var(--wx-panel-accent);
 }
 
 .sliderLabel {
   flex: none;
-  width: 44px;
+  /* Wide enough for the longest label (「透出 100%」) so it never wraps. */
+  width: 64px;
+  white-space: nowrap;
   text-align: right;
-  color: var(--dsw-alias-label-secondary, #77736d);
+  color: var(--wx-panel-fg-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -258,12 +446,12 @@
   gap: 8px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid var(--dsw-alias-border-l1, #dedbd5);
+  border-top: 1px solid var(--wx-panel-border);
 }
 
 .errorText {
   margin-top: 6px;
-  color: var(--dsw-alias-state-error-primary, #cf5050);
+  color: var(--wx-panel-danger);
   font-size: 11px;
   line-height: 1.5;
 }

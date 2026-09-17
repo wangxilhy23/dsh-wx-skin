@@ -1,7 +1,7 @@
 {
   "name": "dsh-wx-skin",
-  "version": "0.1.3",
-  "description": "DSH Web GUI 皮肤插件：侧栏「皮肤」面板，支持自选本地图片 / URL 作为全屏背景，含预设、暗化、模糊、关闭皮肤，跨刷新持久化（外部 client 插件，dsh-web-ui 风格）。",
+  "version": "0.1.4",
+  "description": "DSH Web GUI 皮肤插件：侧栏「皮肤」面板，支持自选本地图片 / URL / 本地文件夹轮播（顺序或随机、一轮内不重复）作为全屏背景，含预设、暗化、模糊、关闭皮肤，跨刷新持久化（外部 client 插件，dsh-web-ui 风格）。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -28,6 +28,8 @@
     "skin",
     "theme",
     "background",
+    "wallpaper",
+    "slideshow",
     "web-ui"
   ],
   "publishConfig": {
