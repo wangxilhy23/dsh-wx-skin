@@ -55,4 +55,9 @@ export interface SkinSettings {
   currentIndex: number
   /** Paths already shown in the current pass — never picked again until the pass ends. */
   usedPaths: string[]
+  /**
+   * Images shown before the current one, most recent last (folder slideshow).
+   * Backs the 「上一张」 action in both order modes.
+   */
+  history: string[]
 }

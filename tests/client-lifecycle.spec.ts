@@ -147,8 +147,9 @@ describe('client half lifecycle', () => {
     const fake = applySkin()
 
     expect(fake.disposers).toHaveLength(1)
-    expect(entries()).toHaveLength(2)
+    expect(entries()).toHaveLength(3)
     expect(entryOf('skin')).not.toBeNull()
+    expect(entryOf('prev')).not.toBeNull()
     expect(entryOf('next')).not.toBeNull()
     expect(layer()).not.toBeNull()
     expect(globalStyle()).not.toBeNull()
@@ -156,18 +157,21 @@ describe('client half lifecycle', () => {
     expect(globalStyle()?.getAttribute('data-plugin')).toBe(PLUGIN_ID)
   })
 
-  it('mounts both sidebar entries in a stable order', () => {
+  it('mounts the sidebar entries in a stable order', () => {
     applySkin()
 
     const skin = entryOf('skin')
+    const prev = entryOf('prev')
     const next = entryOf('next')
     expect(skin).not.toBeNull()
+    expect(prev).not.toBeNull()
     expect(next).not.toBeNull()
     const column = document.querySelector('.x_sidebarCol')
     expect([...(column?.children ?? [])].map(child => child.getAttribute('data-wx-skin-entry-role') ?? child.className))
-      .toEqual(['y_logoRow', 'z_newSession', 'skin', 'next'])
-    // No folder is loaded yet, so the switch entry advertises that state.
+      .toEqual(['y_logoRow', 'z_newSession', 'skin', 'prev', 'next'])
+    // No folder is loaded yet, so both switch entries advertise that state.
     expect(next?.getAttribute('data-empty')).toBe('true')
+    expect(prev?.getAttribute('data-empty')).toBe('true')
   })
 
   it('removes every mounted artifact when the fiber is disposed', () => {
@@ -189,8 +193,9 @@ describe('client half lifecycle', () => {
     const second = applySkin()
 
     expect(second.disposers).toHaveLength(1)
-    expect(entries()).toHaveLength(2)
+    expect(entries()).toHaveLength(3)
     expect(entryOf('skin')).not.toBeNull()
+    expect(entryOf('prev')).not.toBeNull()
     expect(entryOf('next')).not.toBeNull()
     expect(layer()).not.toBeNull()
     expect(globalStyle()).not.toBeNull()
@@ -200,7 +205,7 @@ describe('client half lifecycle', () => {
     const fake = applySkin()
 
     expect(fake.errors).toEqual([])
-    expect(entries()).toHaveLength(2)
+    expect(entries()).toHaveLength(3)
   })
 
   it('swallows a mount failure and leaves no residue', () => {
@@ -274,6 +279,44 @@ describe('client half lifecycle', () => {
     expect(entryOf('next')?.getAttribute('data-empty')).toBe('true')
   })
 
+  it('does nothing when 上一张 is clicked with no folder loaded', () => {
+    applySkin()
+
+    click(entryOf('prev'))
+
+    expect(document.querySelector(`[${PANEL_ATTR}]`)).toBeNull()
+    expect(document.documentElement.style.getPropertyValue('--wx-skin-bg-image')).toBe('')
+    expect(entryOf('prev')?.getAttribute('data-empty')).toBe('true')
+    expect(entryOf('prev')?.getAttribute('title')).toBe('先加载图片文件夹')
+  })
+
+  it('sets the background back to the previous image', () => {
+    // demo1.png is on screen, a.png is the recorded previous image.
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      source: 'folder',
+      folderPath: 'D:\\pics',
+      folderImages: [
+        { path: 'D:\\pics\\a.png', name: 'a.png', rel: 'a.png', size: 1, mtimeMs: 2 },
+        { path: 'D:\\pics\\b.png', name: 'b.png', rel: 'b.png', size: 1, mtimeMs: 3 },
+      ],
+      currentIndex: 1,
+      usedPaths: ['D:\\pics\\a.png', 'D:\\pics\\b.png'],
+      history: ['D:\\pics\\a.png'],
+    }))
+    applySkin()
+
+    click(entryOf('prev'))
+
+    const background = document.documentElement.style.getPropertyValue('--wx-skin-bg-image')
+    expect(background).toContain('a.png')
+    expect(background).not.toContain('b.png')
+    // The entry tooltips follow the new image.
+    expect(entryOf('prev')?.getAttribute('title')).toContain('a.png')
+    expect(entryOf('next')?.getAttribute('title')).toContain('a.png')
+  })
+
   it('shows the current image name in the panel and in the switch tooltip', async () => {
     // A folder is loaded with demo1.png on screen.
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -287,7 +330,8 @@ describe('client half lifecycle', () => {
     }))
     applySkin()
 
-    expect(entryOf('next')?.getAttribute('title')).toBe('顺序下一张 · 第 1/1 张 · demo1.png')
+    expect(entryOf('next')?.getAttribute('title')).toBe('顺序下一张 · 第 1/1 张 · 当前 demo1.png')
+    expect(entryOf('prev')?.getAttribute('title')).toBe('上一张 · 当前 demo1.png')
 
     click(entryOf('skin'))
     await vi.waitFor(() => { expect(nameLine()).not.toBeNull() })
@@ -313,11 +357,44 @@ describe('client half lifecycle', () => {
     expect(localPickButton()).toBeNull()
     expect(panelText()).toContain('文件夹路径')
     expect(panelText()).not.toContain('文件夹轮播')
+    // 上一张 is offered but unavailable until a folder with images is loaded.
+    expect(document.querySelector('[data-wx-skin-prev]')?.hasAttribute('disabled')).toBe(true)
 
     // Switching back restores the image controls (including the presets).
     selectGroup('image')
     await vi.waitFor(() => { expect(localPickButton()).not.toBeNull() })
     expect(folderPathInput()).toBeNull()
+  })
+
+  it('picks up a file added to the folder when the page regains focus', async () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      enabled: true,
+      source: 'folder',
+      folderPath: 'D:\\pics',
+      folderImages: [{ path: 'D:\\pics\\a.png', name: 'a.png', rel: 'a.png', size: 1, mtimeMs: 2 }],
+      currentIndex: 0,
+      usedPaths: ['D:\\pics\\a.png'],
+    }))
+    // The host now reports a second image (added in Explorer after the load).
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({
+      ok: true,
+      root: 'D:\\pics',
+      truncated: false,
+      images: [
+        { path: 'D:\\pics\\a.png', name: 'a.png', rel: 'a.png', size: 1, mtimeMs: 2 },
+        { path: 'D:\\pics\\b.png', name: 'b.png', rel: 'b.png', size: 1, mtimeMs: 9 },
+      ],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    applySkin()
+
+    window.dispatchEvent(new Event('focus'))
+
+    // The entry tooltip reflects the merged list (1 of 2 now), and the shown
+    // image did not jump: the new file joins the queue instead.
+    await vi.waitFor(() => { expect(entryOf('next')?.getAttribute('title')).toContain('第 1/2 张') })
+    expect(entryOf('next')?.getAttribute('title')).toContain('a.png')
+    expect(document.documentElement.style.getPropertyValue('--wx-skin-bg-image')).toContain('a.png')
   })
 
   it('opens on the family the committed source belongs to', async () => {

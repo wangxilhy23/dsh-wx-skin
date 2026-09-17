@@ -62,6 +62,7 @@ export const DEFAULT_SETTINGS: SkinSettings = Object.freeze({
   orderMode: 'sequential',
   currentIndex: -1,
   usedPaths: [],
+  history: [],
 })
 
 /**
@@ -141,6 +142,10 @@ export function sanitizeSettings(raw: unknown): SkinSettings {
     usedPaths: Array.isArray(o.usedPaths)
       ? o.usedPaths.filter((path): path is string => typeof path === 'string' && keptPaths.has(path))
       : [],
+    // Only paths still present in the cached list can be gone back to.
+    history: Array.isArray(o.history)
+      ? o.history.filter((path): path is string => typeof path === 'string' && keptPaths.has(path))
+      : [],
   }
 }
 
@@ -192,6 +197,7 @@ export function isDefaultSettings(settings: SkinSettings): boolean {
     && settings.orderMode === DEFAULT_SETTINGS.orderMode
     && settings.currentIndex === DEFAULT_SETTINGS.currentIndex
     && settings.usedPaths.length === 0
+    && settings.history.length === 0
 }
 
 /**

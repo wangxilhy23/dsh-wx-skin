@@ -15,18 +15,21 @@
 import { createRoot, type Root } from 'react-dom/client'
 import type { SkinSettings } from '../core/types.ts'
 import { SkinPanel } from './SkinPanel.tsx'
-import { advanceFolder, folderStatus, imageUrl } from './skin-folder.ts'
+import { advanceFolder, canGoPrevious, folderSignature, folderStatus, imageUrl, previousFolder, refreshFolderState } from './skin-folder.ts'
 import type { PickerBridge } from './skin-picker.ts'
 import { ENTRY_ATTR, currentImageLabel, isDefaultSettings, loadSettings, saveSettings } from './skin-store.ts'
-import { hostLoad, hostSave } from './skin-host.ts'
+import { hostListFolder, hostLoad, hostSave } from './skin-host.ts'
 import { SkinApplier, ensureGlobalCss, ensureLayer, teardownSkinDom } from './skin-dom.ts'
 import css from './skin.module.css'
 
 const PANEL_ATTR = 'data-wx-skin-panel'
 const PANEL_WIDTH = 300
+/** How often a loaded folder is re-scanned in the background (ms). */
+const FOLDER_RESCAN_MS = 60_000
 
 const SKIN_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 2v2.2M8 11.8V14M2 8h2.2M11.8 8H14M4 4l1.6 1.6M10.4 10.4 12 12M12 4l-1.6 1.6M5.6 10.4 4 12"/></svg>'
 const NEXT_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9"/><path d="M8.5 4.5 12 8l-3.5 3.5"/></svg>'
+const PREV_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8H4"/><path d="M7.5 4.5 4 8l3.5 3.5"/></svg>'
 
 /** Mount options supplied by the browser half entry. */
 export interface MountOptions {
@@ -173,6 +176,7 @@ export function mountSkin(options: MountOptions = {}): () => void {
 
   // Sidebar entries: 「皮肤」 opens the panel; 「下一张」 advances the slideshow.
   const entry = createEntry('皮肤', SKIN_ICON, 'skin')
+  const prevEntry = createEntry('上一张', PREV_ICON, 'prev')
   const nextEntry = createEntry('下一张', NEXT_ICON, 'next')
   const setEntryActive = (active: boolean): void => {
     if (active) entry.dataset.active = 'true'
@@ -180,6 +184,8 @@ export function mountSkin(options: MountOptions = {}): () => void {
   }
   const setNextEntryState = (settings: SkinSettings): void => {
     const status = folderStatus(settings)
+    const name = currentImageLabel(settings)
+    const here = name === null ? '' : ` · 当前 ${name.label}`
     if (status.total === 0) {
       nextEntry.dataset.empty = 'true'
       nextEntry.setAttribute('aria-disabled', 'true')
@@ -187,14 +193,22 @@ export function mountSkin(options: MountOptions = {}): () => void {
     } else {
       delete nextEntry.dataset.empty
       nextEntry.removeAttribute('aria-disabled')
-      const name = currentImageLabel(settings)
-      nextEntry.title = `${settings.orderMode === 'random' ? '随机' : '顺序'}下一张 · 第 ${status.position}/${status.total} 张`
-        + (name === null ? '' : ` · ${name.label}`)
+      nextEntry.title = `${settings.orderMode === 'random' ? '随机' : '顺序'}下一张 · 第 ${status.position}/${status.total} 张${here}`
+    }
+    if (canGoPrevious(settings)) {
+      delete prevEntry.dataset.empty
+      prevEntry.removeAttribute('aria-disabled')
+      prevEntry.title = `上一张${here}`
+    } else {
+      prevEntry.dataset.empty = 'true'
+      prevEntry.setAttribute('aria-disabled', 'true')
+      prevEntry.title = status.total === 0 ? '先加载图片文件夹' : '随机模式还没有可返回的上一张'
     }
   }
   setEntryActive(latest.enabled)
   setNextEntryState(latest)
-  disposers.push(mountEntrySelfHealing(nextEntry, () => entry))
+  disposers.push(mountEntrySelfHealing(nextEntry, () => prevEntry))
+  disposers.push(mountEntrySelfHealing(prevEntry, () => entry))
   disposers.push(mountEntrySelfHealing(entry))
 
   // Server-side durability: the desktop app changes origin — and therefore its
@@ -226,6 +240,7 @@ export function mountSkin(options: MountOptions = {}): () => void {
       onClose={closePanel}
       picker={options.picker}
       onNext={nextImage}
+      onPrevious={previousImage}
     />)
   }
 
@@ -247,6 +262,8 @@ export function mountSkin(options: MountOptions = {}): () => void {
     document.body.appendChild(panelHost)
     root = createRoot(panelHost)
     renderPanel()
+    // Opening the panel is a user gesture: sync the folder list then.
+    void rescanFolder()
   }
 
   /** Every settings change goes through here. */
@@ -285,24 +302,61 @@ export function mountSkin(options: MountOptions = {}): () => void {
     preloadNext(advanced)
   }
 
+  /**
+   * Go back one image (the recorded previous one, or the previous in folder
+   * order under sequential mode). Same rule as 下一张: nothing loaded, nothing
+   * happens — and a click never opens a panel.
+   */
+  const previousImage = (): void => {
+    if (!canGoPrevious(latest)) return
+    const back = previousFolder(latest)
+    commitSettings(back)
+    preloadNext(back)
+  }
+
+  /**
+   * Re-scan the loaded folder so images added outside the app join the queue.
+   *
+   * The merge never switches the background or resets the pass (see
+   * refreshFolderState), and the settings are only written when the list really
+   * changed — a poll that finds nothing new costs one loopback readdir.
+   */
+  let rescanning = false
+  const rescanFolder = async (): Promise<void> => {
+    const folderPath = latest.folderPath
+    if (rescanning || folderPath === null) return
+    rescanning = true
+    try {
+      const result = await hostListFolder(folderPath, latest.folderRecursive)
+      if (!result.ok) return // unrelated failure (e.g. host restarted): keep the cache
+      if (folderSignature(result.images) === folderSignature(latest.folderImages)) return
+      commitSettings(refreshFolderState(latest, result.images))
+    } finally {
+      rescanning = false
+    }
+  }
+
   const togglePanel = (): void => { if (root !== undefined) closePanel(); else openPanel() }
   entry.addEventListener('click', togglePanel)
+  prevEntry.addEventListener('click', previousImage)
   nextEntry.addEventListener('click', nextImage)
 
   // Adopt the durable host copy once the mount is wired (a later arrival is
-  // applied through the same single commit path as any UI change).
+  // applied through the same single commit path as any UI change), then sync the
+  // folder list so files added while the app was closed show up immediately.
   void (async () => {
     try {
       const host = await hostLoad()
       if (host !== null) {
         commitSettings(host)
-        return
+      } else {
+        const local = loadSettings()
+        if (!isDefaultSettings(local)) void hostSave(local)
       }
-      const local = loadSettings()
-      if (!isDefaultSettings(local)) void hostSave(local)
     } catch {
       // Swallow — the skin must never take the shell down.
     }
+    void rescanFolder()
   })()
 
   // Close on outside click, Escape, or window resize.
@@ -321,11 +375,24 @@ export function mountSkin(options: MountOptions = {}): () => void {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('resize', onResize)
   window.addEventListener('beforeunload', onBeforeUnload)
+
+  // Folder rescan triggers: the page regaining focus is the "I just added files
+  // in Explorer" case; the interval covers a side-by-side window; the panel
+  // opening refreshes on demand.
+  const onVisibilityChange = (): void => { if (document.visibilityState === 'visible') void rescanFolder() }
+  const onFocus = (): void => { void rescanFolder() }
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('focus', onFocus)
+  const rescanTimer = window.setInterval(() => { void rescanFolder() }, FOLDER_RESCAN_MS)
+
   disposers.push(() => {
     document.removeEventListener('mousedown', onDocMouseDown)
     window.removeEventListener('keydown', onKeyDown)
     window.removeEventListener('resize', onResize)
     window.removeEventListener('beforeunload', onBeforeUnload)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.removeEventListener('focus', onFocus)
+    window.clearInterval(rescanTimer)
   })
 
   return () => {

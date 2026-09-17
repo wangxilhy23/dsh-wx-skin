@@ -91,7 +91,13 @@ export default [{
         minify: true,
       })
       const classMap: Record<string, string> = {}
-      for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+      // lightningcss returns the exports in a non-stable order, so the emitted
+      // object literal would change between builds and every `npm pack` would
+      // produce different bytes. Sorting the entries (as the official client
+      // preset does) makes the bundle byte-reproducible.
+      const exportEntries = Object.entries(cssExports ?? {})
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      for (const [local, exp] of exportEntries) classMap[local] = exp.name
       // One <style data-plugin> per module file; idempotent under re-evaluation.
       return [
         `const css = ${JSON.stringify(code.toString())};`,

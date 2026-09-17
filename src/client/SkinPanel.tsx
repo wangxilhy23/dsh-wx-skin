@@ -13,7 +13,7 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import type { SkinOrderMode, SkinSettings } from '../core/types.ts'
 import { ImagePipelineError, fileToDataUrl } from './image-pipeline.ts'
-import { folderStatus, loadFolderState } from './skin-folder.ts'
+import { canGoPrevious, folderStatus, loadFolderState } from './skin-folder.ts'
 import { hostListFolder } from './skin-host.ts'
 import type { PickerBridge } from './skin-picker.ts'
 import { DEFAULT_SETTINGS, DEFAULT_SURFACE, MAX_SURFACE, MIN_SURFACE, PRESETS, currentImageLabel } from './skin-store.ts'
@@ -33,6 +33,8 @@ export interface SkinPanelProps {
   picker?: PickerBridge
   /** Advance the slideshow by one image (mount owns the algorithm + preload). */
   onNext: () => void
+  /** Go back one image (mount owns the algorithm + preload). */
+  onPrevious: () => void
 }
 
 /** Describe the currently active source for the status badge. */
@@ -52,7 +54,7 @@ function describe(settings: SkinSettings): string {
 type SourceGroup = 'image' | 'folder'
 
 /** The popover skin settings panel. */
-export function SkinPanel({ settings, commit, onClose, picker, onNext }: SkinPanelProps): JSX.Element {
+export function SkinPanel({ settings, commit, onClose, picker, onNext, onPrevious }: SkinPanelProps): JSX.Element {
   const [urlInput, setUrlInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -377,7 +379,18 @@ export function SkinPanel({ settings, commit, onClose, picker, onNext }: SkinPan
             </div>
             <button
               type="button"
+              className={css.button}
+              data-wx-skin-prev=""
+              disabled={!canGoPrevious(settings)}
+              title={canGoPrevious(settings) ? '上一张' : '没有可返回的上一张'}
+              onClick={onPrevious}
+            >
+              上一张
+            </button>
+            <button
+              type="button"
               className={css.buttonPrimary}
+              data-wx-skin-next=""
               disabled={status.total === 0}
               onClick={onNext}
             >

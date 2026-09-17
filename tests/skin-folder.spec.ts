@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '../src/client/skin-store.ts'
-import { advanceFolder, folderStatus, imageUrl, loadFolderState, sortFolderImages } from '../src/client/skin-folder.ts'
+import { advanceFolder, canGoPrevious, folderSignature, folderStatus, imageUrl, loadFolderState, MAX_HISTORY, previousFolder, refreshFolderState, sortFolderImages } from '../src/client/skin-folder.ts'
 import type { SkinFolderImage, SkinSettings } from '../src/core/types.ts'
 
 function image(name: string, mtimeMs = 1000): SkinFolderImage {
@@ -136,6 +136,170 @@ describe('advanceFolder — random', () => {
   })
 })
 
+describe('previousFolder', () => {
+  const images = [image('a.png'), image('b.png'), image('c.png')]
+
+  it('returns to the recorded previous image and pops it', () => {
+    const settings = folderSettings(images, {
+      currentIndex: 2,
+      usedPaths: ['D:\\pics\\a.png', 'D:\\pics\\b.png', 'D:\\pics\\c.png'],
+      history: ['D:\\pics\\a.png', 'D:\\pics\\b.png'],
+    })
+    const back = previousFolder(settings)
+    expect(back.currentIndex).toBe(1)
+    expect(back.history).toEqual(['D:\\pics\\a.png'])
+    const twice = previousFolder(back)
+    expect(twice.currentIndex).toBe(0)
+    expect(previousFolder(twice).history).toEqual([])
+  })
+
+  it('walks back through folder order when there is no history (sequential)', () => {
+    expect(previousFolder(folderSettings(images, { currentIndex: 2, history: [] })).currentIndex).toBe(1)
+    // From the first image the wrap lands on the last one.
+    expect(previousFolder(folderSettings(images, { currentIndex: 0, history: [] })).currentIndex).toBe(2)
+    // With nothing shown yet the wrap lands on the last one too.
+    expect(previousFolder(folderSettings(images, { currentIndex: -1, history: [] })).currentIndex).toBe(2)
+  })
+
+  it('marks the image it returns to as shown in this pass', () => {
+    const settings = folderSettings(images, { currentIndex: 2, usedPaths: ['D:\\pics\\c.png'], history: [] })
+    expect(previousFolder(settings).usedPaths).toEqual(['D:\\pics\\b.png', 'D:\\pics\\c.png'])
+  })
+
+  it('skips a recorded path that no longer exists in the list', () => {
+    const settings = folderSettings(images, { currentIndex: 2, history: ['D:\\pics\\gone.png'] })
+    const back = previousFolder(settings)
+    expect(back.currentIndex).toBe(1)
+    expect(back.history).toEqual([])
+  })
+
+  it('does nothing in random mode without a recorded previous image', () => {
+    const settings = folderSettings(images, { orderMode: 'random', currentIndex: 1, history: [] })
+    expect(previousFolder(settings)).toBe(settings)
+  })
+
+  it('does nothing with no folder loaded', () => {
+    const empty = folderSettings([], { currentIndex: -1, history: [] })
+    expect(previousFolder(empty)).toBe(empty)
+  })
+})
+
+describe('canGoPrevious', () => {
+  const images = [image('a.png'), image('b.png')]
+
+  it('is false with no folder, true with history, and mode-dependent without it', () => {
+    expect(canGoPrevious(folderSettings([]))).toBe(false)
+    expect(canGoPrevious(folderSettings(images, { history: ['D:\\pics\\a.png'] }))).toBe(true)
+    expect(canGoPrevious(folderSettings(images, { history: [] }))).toBe(true)
+    expect(canGoPrevious(folderSettings(images, { orderMode: 'random', history: [] }))).toBe(false)
+  })
+})
+
+describe('history bookkeeping', () => {
+  const images = [image('a.png'), image('b.png'), image('c.png')]
+
+  it('records the image left behind on every 下一张', () => {
+    const first = advanceFolder(folderSettings(images))
+    expect(first.history).toEqual([])
+    const second = advanceFolder(first)
+    expect(second.history).toEqual(['D:\\pics\\a.png'])
+    const third = advanceFolder(second)
+    expect(third.history).toEqual(['D:\\pics\\a.png', 'D:\\pics\\b.png'])
+  })
+
+  it('caps the history so the persisted blob cannot grow forever', () => {
+    let settings = folderSettings(images)
+    for (let step = 0; step < MAX_HISTORY + 10; step += 1) settings = advanceFolder(settings)
+    expect(settings.history.length).toBe(MAX_HISTORY)
+  })
+
+  it('filters history for the same folder and clears it for a different one', () => {
+    // Same folder, list changed (a file was added): the record is kept, aligned by path.
+    const kept = loadFolderState(
+      folderSettings(images, { currentIndex: 0, history: ['D:\\pics\\a.png', 'D:\\pics\\gone.png'] }),
+      'D:\\pics',
+      false,
+      images,
+    )
+    expect(kept.history).toEqual(['D:\\pics\\a.png'])
+
+    // A different folder starts over.
+    const other = loadFolderState(
+      folderSettings(images, { currentIndex: 0, history: ['D:\\pics\\a.png'] }),
+      'D:\\other',
+      false,
+      [image('a.png'), image('b.png')],
+    )
+    expect(other.history).toEqual([])
+  })
+
+  it('drops the history when the folder empties out', () => {
+    expect(advanceFolder(folderSettings([])).history).toEqual([])
+  })
+})
+
+describe('refreshFolderState (automatic rescan)', () => {
+  const images = [image('a.png'), image('b.png'), image('c.png')]
+
+  it('keeps the shown image, its slot, and the records when files are added', () => {
+    const settings = folderSettings(images, {
+      currentIndex: 1,
+      usedPaths: ['D:\\pics\\a.png', 'D:\\pics\\b.png'],
+      history: ['D:\\pics\\a.png'],
+    })
+    const next = refreshFolderState(settings, [...images, image('d.png')])
+    expect(next.currentIndex).toBe(1)
+    expect(next.folderImages.map(image => image.name)).toEqual(['a.png', 'b.png', 'c.png', 'd.png'])
+    expect(next.usedPaths).toEqual(['D:\\pics\\a.png', 'D:\\pics\\b.png'])
+    expect(next.history).toEqual(['D:\\pics\\a.png'])
+    // The new file is NOT marked as shown, so the pass reaches it in order.
+    expect(next.usedPaths).not.toContain('D:\\pics\\d.png')
+    const first = advanceFolder(next)
+    expect(first.folderImages[first.currentIndex]?.name).toBe('c.png')
+    const second = advanceFolder(first)
+    expect(second.folderImages[second.currentIndex]?.name).toBe('d.png')
+  })
+
+  it('falls back to the slot the shown image occupied when its file disappears', () => {
+    const settings = folderSettings(images, { currentIndex: 1, usedPaths: ['D:\\pics\\b.png'] })
+    const next = refreshFolderState(settings, [image('a.png'), image('c.png')])
+    expect(next.currentIndex).toBe(1)
+    expect(next.folderImages[1]?.name).toBe('c.png')
+    // Records referring to the removed file are dropped.
+    expect(next.usedPaths).toEqual([])
+  })
+
+  it('drops every record when the folder empties out', () => {
+    const settings = folderSettings(images, {
+      currentIndex: 2,
+      usedPaths: images.map(image => image.path),
+      history: ['D:\\pics\\a.png'],
+    })
+    const next = refreshFolderState(settings, [])
+    expect(next.folderImages).toEqual([])
+    expect(next.currentIndex).toBe(-1)
+    expect(next.usedPaths).toEqual([])
+    expect(next.history).toEqual([])
+  })
+
+  it('never touches the active source (a rescan must not switch the background)', () => {
+    const settings = {
+      ...folderSettings(images, { currentIndex: 0 }),
+      source: 'preset' as const,
+      preset: '#123456',
+    }
+    const next = refreshFolderState(settings, [...images, image('d.png')])
+    expect(next.source).toBe('preset')
+    expect(next.preset).toBe('#123456')
+  })
+
+  it('detects list changes through the signature', () => {
+    expect(folderSignature(images)).toBe(folderSignature([...images]))
+    expect(folderSignature(images)).not.toBe(folderSignature([...images, image('d.png')]))
+    expect(folderSignature(images)).not.toBe(folderSignature([image('a.png', 999), image('b.png'), image('c.png')]))
+  })
+})
+
 describe('loadFolderState', () => {
   const images = [image('a.png'), image('b.png'), image('c.png')]
 
@@ -163,12 +327,21 @@ describe('loadFolderState', () => {
     expect(next.usedPaths).toEqual(['D:\\pics\\a.png', 'D:\\pics\\b.png'])
   })
 
-  it('starts a fresh pass when the list changed', () => {
+  it('keeps the current image and the pass record when the list gains files', () => {
     const settings = folderSettings(images, { currentIndex: 1, usedPaths: ['D:\\pics\\a.png'] })
     const next = loadFolderState(settings, 'D:\\pics', false, [...images, image('d.png')])
-    expect(next.currentIndex).toBe(0)
+    // Reloading the same folder merges: nothing jumps, the new file just waits its turn.
+    expect(next.currentIndex).toBe(1)
     expect(next.usedPaths).toEqual(['D:\\pics\\a.png'])
     expect(next.folderImages).toHaveLength(4)
+  })
+
+  it('starts a fresh pass for a different folder', () => {
+    const settings = folderSettings(images, { currentIndex: 2, usedPaths: ['D:\\pics\\a.png'] })
+    const next = loadFolderState(settings, 'D:\\elsewhere', false, images)
+    expect(next.folderPath).toBe('D:\\elsewhere')
+    expect(next.currentIndex).toBe(0)
+    expect(next.usedPaths).toEqual(['D:\\pics\\a.png'])
   })
 
   it('sorts whatever the host returned', () => {
