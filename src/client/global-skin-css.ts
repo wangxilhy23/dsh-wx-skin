@@ -30,10 +30,10 @@ html[data-wx-skin-active] div[data-wx-skin-layer] {
   z-index: 0;
   pointer-events: none;
   background-image: var(--wx-skin-bg-image, none);
-  background-color: var(--wx-skin-bg-color, transparent);
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
+  /* 适合度 (fit mode) projects onto these three; the fallbacks are 填充. */
+  background-size: var(--wx-skin-bg-size, cover);
+  background-repeat: var(--wx-skin-bg-repeat, no-repeat);
+  background-position: var(--wx-skin-bg-position, center);
   filter: blur(var(--wx-skin-blur, 0px));
 }
 
@@ -65,6 +65,12 @@ html[data-wx-skin-active] body {
   --dsw-alias-bg-overlay: rgb(233 236 242 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-bg-module-platform: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-bg-multi-select: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
+  /* DSH 0.1.7 turned this from the bg-layer-3 alias (which this sheet already
+     took over) into a literal rgba, so every menu/dropdown/dock/panel surface
+     stopped following the 透出 slider. Re-bound to the same hue at the skin's own
+     surface opacity; the !important also outranks the darwin near-opaque
+     override in the shell's base.css. */
+  --dsw-specific-menu: rgb(248 249 250 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-sidebar-fill: rgb(249 250 251 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-input-major: rgb(255 255 255 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-selector: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
@@ -88,6 +94,7 @@ html[data-wx-skin-active] body[data-ds-dark-theme] {
   --dsw-alias-bg-overlay: rgb(97 102 107 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-bg-module-platform: rgb(53 54 56 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-bg-multi-select: rgb(44 44 46 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-specific-menu: rgb(48 49 54 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-sidebar-fill: rgb(27 27 28 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-input-major: rgb(44 44 46 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-selector: rgb(53 54 56 / var(--wx-skin-surface, 0.72)) !important;

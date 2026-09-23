@@ -14,15 +14,25 @@
 import type { SkinFolderImage, SkinSettings } from '../core/types.ts'
 import { sanitizeFolderImages, sanitizeSettings } from './skin-store.ts'
 
-/** HTTP route names served by the host half. */
-export const LOAD_PATH = '/dsh-wx-skin/load'
-export const SAVE_PATH = '/dsh-wx-skin/save'
-export const FOLDER_PATH = '/dsh-wx-skin/folder'
+/**
+ * Browser references to the host half's routes. They are DOCUMENT-RELATIVE on
+ * purpose: the shell injects `<base href="./">` (`@deepseek-ai/dsh-host-frontend-static`),
+ * so the same literal reaches the listener under any mount — including a
+ * prefix-stripping proxy, where a root-absolute `/dsh-wx-skin/load` would miss.
+ * DSH's `verify-client-route-resolution` gate enforces this shape for its own
+ * browser sources; this plugin follows the same rule
+ * (`.agents/notes/implemented/architecture/2026-09-14-web-document-relative-app-routes.md`
+ * in the DSH checkout). The host half's registration keys stay absolute
+ * (`LOAD_PATH`/`SAVE_PATH`/`FOLDER_PATH` in the package root).
+ */
+export const LOAD_ROUTE = 'dsh-wx-skin/load'
+export const SAVE_ROUTE = 'dsh-wx-skin/save'
+export const FOLDER_ROUTE = 'dsh-wx-skin/folder'
 
 /** Read the durable settings from the host, or null when unavailable. */
 export async function hostLoad(fetchImpl: typeof fetch = globalThis.fetch): Promise<SkinSettings | null> {
   try {
-    const res = await fetchImpl(LOAD_PATH)
+    const res = await fetchImpl(LOAD_ROUTE)
     if (!res.ok) return null
     const body = await res.json() as { ok?: unknown; settings?: unknown }
     // The host only ever writes an object; any other shape means no usable
@@ -40,7 +50,7 @@ export async function hostLoad(fetchImpl: typeof fetch = globalThis.fetch): Prom
 /** Persist the settings to the host; false when it could not (never throws). */
 export async function hostSave(settings: SkinSettings, fetchImpl: typeof fetch = globalThis.fetch): Promise<boolean> {
   try {
-    const res = await fetchImpl(SAVE_PATH, {
+    const res = await fetchImpl(SAVE_ROUTE, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ settings }),
@@ -93,7 +103,7 @@ export async function hostListFolder(
 ): Promise<FolderScanResult> {
   let response: Response
   try {
-    response = await fetchImpl(FOLDER_PATH, {
+    response = await fetchImpl(FOLDER_ROUTE, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ path, recursive }),

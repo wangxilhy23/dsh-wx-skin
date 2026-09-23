@@ -4,10 +4,17 @@
  */
 
 /** Which background source the skin currently paints. */
-export type SkinSource = 'image' | 'url' | 'preset' | 'folder' | 'none'
+export type SkinSource = 'image' | 'url' | 'folder' | 'none'
 
 /** How the folder slideshow picks the next image. */
 export type SkinOrderMode = 'sequential' | 'random'
+
+/**
+ * How the background image fills the viewport — the familiar desktop wallpaper
+ * choices: 填充 (fill, crop the overflow), 适应 (fit, letterbox), 拉伸 (stretch,
+ * may distort), 平铺 (tile at natural size), 居中 (center at natural size).
+ */
+export type SkinFitMode = 'fill' | 'fit' | 'stretch' | 'tile' | 'center'
 
 /** One cached folder image (mirrors the host scan entry). */
 export interface SkinFolderImage {
@@ -35,14 +42,14 @@ export interface SkinSettings {
   imageName: string | null
   /** Remote / absolute image URL (`source === 'url'`). */
   url: string | null
-  /** CSS background value of the active preset — solid color or gradient (`source === 'preset'`). */
-  preset: string | null
   /** Black scrim opacity 0..0.8, applied between the image and the surfaces. */
   dim: number
   /** Blur radius in px on the background layer, 0..24. */
   blur: number
   /** Surface opacity 0.5..1 — how see-through the app surfaces are (0.5 = very, 1 = opaque). */
   surface: number
+  /** How the image fills the viewport (see {@link SkinFitMode}). */
+  fit: SkinFitMode
   /** Last folder loaded by the slideshow; the host confines image requests to it. */
   folderPath: string | null
   /** Cached image list of `folderPath`, in slideshow order (`source === 'folder'`). */

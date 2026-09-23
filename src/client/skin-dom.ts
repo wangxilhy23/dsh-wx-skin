@@ -7,7 +7,7 @@
  */
 import type { SkinSettings } from '../core/types.ts'
 import { GLOBAL_SKIN_CSS } from './global-skin-css.ts'
-import { ACTIVE_ATTR, ENTRY_ATTR, LAYER_ATTR, SKIN_CSS_VARS, cssVariables } from './skin-store.ts'
+import { ACTIVE_ATTR, LAYER_ATTR, SKIN_CSS_VARS, cssVariables } from './skin-store.ts'
 
 /** Identity of the injected global <style> tag (idempotent injection key). */
 export const GLOBAL_STYLE_ID = 'dsh-wx-skin/global'
@@ -67,13 +67,17 @@ export class SkinApplier {
 }
 
 /**
- * Remove everything the skin mounted: sidebar entries, the background layer,
- * the global stylesheet, and the document-level attributes/variables. Every
- * step is a query-then-remove, so this is idempotent and safe to call from a
- * fiber disposer, a failed mount, or both.
+ * Remove everything the skin mounted: the background layer, the global
+ * stylesheet, and the document-level attributes/variables. Every step is a
+ * query-then-remove, so this is idempotent and safe to call from a fiber
+ * disposer, a failed mount, or both.
+ *
+ * The sidebar entries are NOT swept here: they are React components registered
+ * into the harness's `sidebar.footer.action` slot, so the shell unmounts them
+ * when the registration's declaration lifetime ends (and the registration
+ * disposer runs on fiber unload). React stays the single owner of those nodes.
  */
 export function teardownSkinDom(): void {
-  for (const entry of document.querySelectorAll(`[${ENTRY_ATTR}]`)) entry.remove()
   document.querySelector<HTMLElement>(`div[${LAYER_ATTR}]`)?.remove()
   document.querySelector<HTMLElement>(`style[data-plugin-css="${GLOBAL_STYLE_ID}"]`)?.remove()
   const root = document.documentElement

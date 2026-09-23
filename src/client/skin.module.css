@@ -1,54 +1,92 @@
-/* dsh-wx-skin panel + sidebar entry styles (CSS Modules; compiled + injected by the client bundle).
+/* dsh-wx-skin settings-page + sidebar-action styles (CSS Modules; compiled +
+ * injected by the client bundle).
  *
  * Two color planes, deliberately separate:
  *
- * 1. The sidebar entry (.entry*) lives INSIDE the shell sidebar, so it reads
- *    the theme alias tokens and follows the GUI theme like its neighbours.
+ * 1. The sidebar actions (.footerAction*) live INSIDE the shell sidebar, so they
+ *    read the theme alias tokens and follow the GUI theme like their neighbours.
  *
- * 2. The settings panel is a body-level popover with its own OPAQUE surface, so
- *    it must not read alias tokens at all: `--dsw-alias-label-primary` inverts
- *    to near-white in the dark theme while the panel surface stays light, which
- *    is exactly the "light text on a light panel" defect this layer fixes.
- *    Instead the panel declares a semantic `--wx-panel-*` set (light defaults)
- *    and re-declares it under `body[data-ds-dark-theme]`. Every value keeps the
- *    literal equivalent of its static token as the var() fallback (the
- *    `--dsw-static-*` tokens are theme-invariant), and `color-scheme` keeps the
- *    native controls — range track/thumb, checkbox, panel scrollbar — in the
- *    same scheme as the panel they sit on.
+ * 2. The settings page is a page inside the harness Settings modal. It keeps its
+ *    own semantic `--wx-panel-*` palette (light defaults + a
+ *    `body[data-ds-dark-theme]` override) rather than reading `--dsw-alias-*`
+ *    directly: the page's controls were tuned as one set, and every value keeps
+ *    the literal equivalent of its static token as the var() fallback (the
+ *    `--dsw-static-*` tokens are theme-invariant). `color-scheme` keeps the
+ *    native controls — range track/thumb, checkbox — in the same scheme as the
+ *    page they sit on.
  *
- * RULE: everything below the panel marker comment must never reference
+ * RULE: everything below the settings-page marker comment must never reference
  * `--dsw-alias-*` again. tests/panel-theme.spec.ts enforces it, together with
  * the contrast of the two palettes.
  */
 
-/* ---- sidebar entry row (injected DOM, mirrors the shell's nav-row look) ---- */
+/* ---- sidebar-foot actions (registered into the shell's `sidebar.footer.action`) ----
+ *
+ * The shell places ONE row per registration inside its `.footerActions` flex
+ * row, above the Settings row, and hands the occupant `{ wide }`. The whole skin
+ * group therefore registers as a single occupant (see entries.tsx), and the
+ * component additionally asks that row to wrap, because a shipped occupant
+ * (`cordis-panel`) claims a full line with `flex: none`.
+ */
 
-.entry {
+.footerGroup {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex: none;
+  min-width: 0;
+}
+
+/* Wide sidebar: one full line, three equal actions. */
+.footerGroupWide {
   width: 100%;
-  padding: 8px 12px;
+  gap: 4px;
+  margin: 8px 0 0;
+}
+
+/* Collapsed rail: a single 28px icon, centered like the shell's own rail rows. */
+.footerGroupRail {
+  width: auto;
+  justify-content: center;
+}
+
+.footerAction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   box-sizing: border-box;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  text-align: left;
 }
 
-.entry:hover {
+.footerActionWide {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 6px;
+}
+
+.footerActionRail {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.footerAction:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, 0.06));
 }
 
-.entry[data-active='true'] {
+.footerAction[data-active='true'] {
   background: var(--dsw-alias-interactive-bg-active, rgba(103, 88, 212, 0.12));
   color: var(--dsw-alias-state-business-primary, #6758d4);
 }
 
-.entry[data-empty='true'] {
+.footerAction[data-empty='true'] {
   opacity: 0.55;
 }
 
@@ -67,10 +105,9 @@
   white-space: nowrap;
 }
 
-/* ---- popover panel ---- */
+/* ---- settings page (rendered inside the harness Settings panel) ---- */
 
-.panel {
-  /* Light palette (defaults). Literal fallbacks mirror the --dsw-static-* tokens. */
+.panel {  /* Light palette (defaults). Literal fallbacks mirror the --dsw-static-* tokens. */
   --wx-panel-bg: var(--dsw-static-neutral-bluish-100, #ebedf2);
   --wx-panel-fg: var(--dsw-static-neutral-bluish-1000, #0f1115);
   --wx-panel-fg-muted: var(--dsw-static-neutral-bluish-700, #61666b);
@@ -81,22 +118,16 @@
   --wx-panel-accent-fill: var(--dsw-static-deepseek-600, #4868b2);
   --wx-panel-accent-fill-fg: var(--dsw-static-neutral-00, #ffffff);
   --wx-panel-danger: var(--dsw-static-red-900, #570c0c);
-  --wx-panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   color-scheme: light;
 
+  /* Inline page, not a floating card: the shell's options column owns padding
+     and scrolling, so the page only supplies its own controls and palette. */
   box-sizing: border-box;
-  width: 300px;
-  max-height: min(80vh, 560px);
-  overflow-y: auto;
-  padding: 12px;
-  border: 1px solid var(--wx-panel-border);
-  border-radius: 10px;
-  /* Opaque palette (never the skin's translucent surface tokens), so the panel
-     stays readable over any wallpaper and in either document theme. */
-  background: var(--wx-panel-bg);
-  color: var(--wx-panel-fg);
+  width: 100%;
+  padding: 0;
+  background: transparent;
   font-size: 12px;
-  box-shadow: var(--wx-panel-shadow);
+  color: var(--wx-panel-fg);
 }
 
 /* Dark palette: same semantic names, read by the panel only. */
@@ -107,38 +138,11 @@ body[data-ds-dark-theme] .panel {
   --wx-panel-border: var(--dsw-static-neutral-bluish-700, #61666b);
   --wx-panel-control-bg: var(--dsw-static-neutral-bluish-800, #353638);
   --wx-panel-control-hover: var(--dsw-static-neutral-bluish-750, #43454a);
-  --wx-panel-accent: var(--dsw-static-deepseek-400, #679efe);
+  --wx-panel-accent: var(--dsw-static-deepseek-400, #7aaaff);
   --wx-panel-accent-fill: var(--dsw-static-deepseek-450, #5686fe);
   --wx-panel-accent-fill-fg: var(--dsw-static-neutral-bluish-1000, #0f1115);
   --wx-panel-danger: var(--dsw-static-red-100, #fee2e2);
-  --wx-panel-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
   color-scheme: dark;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-weight: 650;
-}
-
-.close {
-  border: 0;
-  background: transparent;
-  color: var(--wx-panel-fg-muted);
-  font: inherit;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 6px;
-}
-
-.close:hover {
-  background: var(--wx-panel-control-hover);
-  color: var(--wx-panel-fg);
 }
 
 .toggleRow {
@@ -152,17 +156,22 @@ body[data-ds-dark-theme] .panel {
   accent-color: var(--wx-panel-accent);
 }
 
+/* Background preview: big enough to show the WHOLE image (contain, not cover),
+   letterboxed against the control surface. */
 .preview {
   display: grid;
   place-items: center;
-  height: 72px;
+  height: min(36vh, 340px);
+  min-height: 180px;
   box-sizing: border-box;
   margin-bottom: 6px;
+  padding: 4px;
   border: 1px solid var(--wx-panel-border);
   border-radius: 8px;
   background-color: var(--wx-panel-control-bg);
   background-position: center;
-  background-size: cover;
+  background-repeat: no-repeat;
+  background-size: contain;
   color: var(--wx-panel-fg-muted);
   overflow: hidden;
 }
@@ -269,10 +278,11 @@ body[data-ds-dark-theme] .panel {
   margin-bottom: 4px;
 }
 
-/* ---- source-family dropdown ---- */
+/* ---- 适合度 (background fit mode) ---- */
 
 .select {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 30px;
   padding: 0 8px;
   box-sizing: border-box;
@@ -283,6 +293,14 @@ body[data-ds-dark-theme] .panel {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* One line explaining what the chosen mode does to the image. */
+.hintText {
+  margin: -2px 0 6px;
+  color: var(--wx-panel-fg-muted);
+  font-size: 11px;
+  line-height: 16px;
 }
 
 /* ---- folder slideshow controls ---- */
@@ -392,27 +410,6 @@ body[data-ds-dark-theme] .panel {
 }
 
 .urlInput:focus {
-  outline: 2px solid var(--wx-panel-accent);
-  outline-offset: -1px;
-}
-
-.presets {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.swatch {
-  height: 40px;
-  padding: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--wx-panel-border);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.swatchActive {
   outline: 2px solid var(--wx-panel-accent);
   outline-offset: -1px;
 }

@@ -4,19 +4,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SETTINGS,
-  PRESETS,
+  FIT_MODES,
   STORAGE_KEY,
   clamp,
   cssVariables,
   currentImageLabel,
   escapeCssUrl,
+  fitProjection,
   isDefaultSettings,
   loadSettings,
   sanitizeFolderImages,
   sanitizeSettings,
   saveSettings,
   urlBasename,
-  type SkinPreset,
 } from '../src/client/skin-store.ts'
 import type { SkinFolderImage, SkinSettings } from '../src/core/types.ts'
 
@@ -55,7 +55,6 @@ describe('sanitizeSettings', () => {
       source: 'image',
       imageDataUrl: 'data:image/png;base64,AAA',
       url: 123,
-      preset: '',
       dim: 0.5,
       blur: 6,
     })
@@ -63,7 +62,6 @@ describe('sanitizeSettings', () => {
     expect(out.source).toBe('image')
     expect(out.imageDataUrl).toBe('data:image/png;base64,AAA')
     expect(out.url).toBeNull()
-    expect(out.preset).toBeNull()
     expect(out.dim).toBe(0.5)
     expect(out.blur).toBe(6)
     expect(out.surface).toBe(0.72)
@@ -71,6 +69,15 @@ describe('sanitizeSettings', () => {
 
   it('rejects unknown sources', () => {
     expect(sanitizeSettings({ source: 'video' }).source).toBe('none')
+    // Presets were removed; a stored one reads as "nothing set".
+    expect(sanitizeSettings({ source: 'preset', preset: '#123456' }).source).toBe('none')
+  })
+
+  it('keeps a known fit mode and falls back to 填充 for anything else', () => {
+    expect(sanitizeSettings({ fit: 'tile' }).fit).toBe('tile')
+    expect(FIT_MODES).toContain(sanitizeSettings({}).fit)
+    expect(sanitizeSettings({ fit: 'span' }).fit).toBe('fill')
+    expect(sanitizeSettings({ fit: 42 }).fit).toBe('fill')
   })
 
   it('clamps dim, blur, and surface', () => {
@@ -116,8 +123,9 @@ describe('isDefaultSettings', () => {
 
   it('false when any field deviates', () => {
     expect(isDefaultSettings({ ...DEFAULT_SETTINGS, enabled: true })).toBe(false)
-    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, source: 'preset', preset: '#000' })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, source: 'url', url: 'https://example.test/a.png' })).toBe(false)
     expect(isDefaultSettings({ ...DEFAULT_SETTINGS, dim: 0.4 })).toBe(false)
+    expect(isDefaultSettings({ ...DEFAULT_SETTINGS, fit: 'fit' })).toBe(false)
     expect(isDefaultSettings({ ...DEFAULT_SETTINGS, imageName: 'wall.png' })).toBe(false)
     expect(isDefaultSettings(enabledImage)).toBe(false)
   })
@@ -176,16 +184,6 @@ describe('currentImageLabel', () => {
     })
   })
 
-  it('names a preset by its catalog label', () => {
-    const settings: SkinSettings = {
-      ...DEFAULT_SETTINGS,
-      enabled: true,
-      source: 'preset',
-      preset: PRESETS[0]?.value ?? '',
-    }
-    expect(currentImageLabel(settings)).toEqual({ label: PRESETS[0]?.label, detail: PRESETS[0]?.value })
-  })
-
   it('reports nothing while the skin is off or no source is set', () => {
     expect(currentImageLabel({ ...DEFAULT_SETTINGS })).toBeNull()
     expect(currentImageLabel({ ...DEFAULT_SETTINGS, enabled: false, source: 'folder', folderImages: [folderImage('a.png')], currentIndex: 0 })).toBeNull()
@@ -228,13 +226,39 @@ describe('cssVariables', () => {
     expect(vars['--wx-skin-bg-image']).toBe('url("a\\"b\\\\c")')
   })
 
-  it('routes gradients to background-image and solids to background-color', () => {
-    const gradient = cssVariables({ ...enabledImage, source: 'preset', preset: 'linear-gradient(135deg, #000, #fff)' })
-    expect(gradient['--wx-skin-bg-image']).toBe('linear-gradient(135deg, #000, #fff)')
-    expect(gradient['--wx-skin-bg-color']).toBeUndefined()
-    const solid = cssVariables({ ...enabledImage, source: 'preset', preset: '#1f2a44' })
-    expect(solid['--wx-skin-bg-color']).toBe('#1f2a44')
-    expect(solid['--wx-skin-bg-image']).toBeUndefined()
+  it('projects the fit mode onto the background longhands', () => {
+    // 填充 is the default and matches the layer's own fallbacks.
+    const fill = cssVariables(enabledImage)
+    expect(fill['--wx-skin-bg-size']).toBe('cover')
+    expect(fill['--wx-skin-bg-repeat']).toBe('no-repeat')
+    expect(fill['--wx-skin-bg-position']).toBe('center')
+
+    const tile = cssVariables({ ...enabledImage, fit: 'tile' })
+    expect(tile['--wx-skin-bg-size']).toBe('auto')
+    expect(tile['--wx-skin-bg-repeat']).toBe('repeat')
+    expect(tile['--wx-skin-bg-position']).toBe('left top')
+
+    const stretch = cssVariables({ ...enabledImage, fit: 'stretch' })
+    expect(stretch['--wx-skin-bg-size']).toBe('100% 100%')
+  })
+})
+
+describe('fitProjection', () => {
+  it('maps every mode onto the wallpaper vocabulary', () => {
+    expect(fitProjection('fill')).toEqual({ size: 'cover', repeat: 'no-repeat', position: 'center' })
+    expect(fitProjection('fit')).toEqual({ size: 'contain', repeat: 'no-repeat', position: 'center' })
+    expect(fitProjection('stretch')).toEqual({ size: '100% 100%', repeat: 'no-repeat', position: 'center' })
+    expect(fitProjection('tile')).toEqual({ size: 'auto', repeat: 'repeat', position: 'left top' })
+    expect(fitProjection('center')).toEqual({ size: 'auto', repeat: 'no-repeat', position: 'center' })
+  })
+
+  it('projects every mode the settings page offers', () => {
+    for (const mode of FIT_MODES) {
+      const projection = fitProjection(mode)
+      expect(projection.size).not.toBe('')
+      expect(projection.repeat).not.toBe('')
+      expect(projection.position).not.toBe('')
+    }
   })
 })
 
@@ -307,7 +331,7 @@ describe('folder settings', () => {
       currentIndex: 1,
     }
     const vars = cssVariables(settings)
-    expect(vars['--wx-skin-bg-image']).toBe('url("/dsh-wx-skin/image?p=D%3A%5Cpics%5Cc.png&v=43")')
+    expect(vars['--wx-skin-bg-image']).toBe('url("dsh-wx-skin/image?p=D%3A%5Cpics%5Cc.png&v=43")')
     // No image picked (empty folder) leaves the background unset.
     expect(cssVariables({ ...settings, folderImages: [], currentIndex: -1 })['--wx-skin-bg-image']).toBeUndefined()
   })
@@ -323,14 +347,5 @@ describe('helpers', () => {
   it('escapeCssUrl escapes dangerous characters', () => {
     expect(escapeCssUrl('plain')).toBe('plain')
     expect(escapeCssUrl('a"b')).toBe('a\\"b')
-  })
-
-  it('preset catalog has labels and usable values', () => {
-    expect(PRESETS.length).toBeGreaterThan(0)
-    for (const preset of PRESETS as readonly SkinPreset[]) {
-      expect(preset.id).not.toBe('')
-      expect(preset.label).not.toBe('')
-      expect(preset.value).not.toBe('')
-    }
   })
 })

@@ -12,15 +12,50 @@
  * @module dsh-wx-skin/client/skin-folder
  */
 import type { SkinFolderImage, SkinSettings } from '../core/types.ts'
+import { samePath } from './skin-path.ts'
 
-/** Host route serving one image file inside the configured folder. */
-export const IMAGE_ROUTE = '/dsh-wx-skin/image'
+/**
+ * Browser reference to the host route serving one image file. Document-relative
+ * for the same reason as the paths in `skin-host.ts`: the shell's
+ * `<base href="./">` resolves it under whatever mount served the page, and the
+ * URL is consumed by `new Image().src`, `preloadNext`, and the
+ * `--wx-skin-bg-image` inline custom property (inline-style URLs resolve
+ * against the document base URL too).
+ */
+export const IMAGE_ROUTE = 'dsh-wx-skin/image'
 
 /** Upper bound on the cached list (mirrors the host scan bound). */
 export const MAX_CACHED_IMAGES = 2000
 
 /** Natural-order comparator on the root-relative path (`img2` before `img10`). */
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/**
+ * Index of the cached image whose file name matches `name`, or -1.
+ *
+ * This is how a file chosen through the browser's file dialog joins the
+ * slideshow: that dialog hands over the name and nothing else (no directory), so
+ * when the loaded folder already holds exactly one image with that name, the
+ * cursor can be placed on it — 下一张 then continues in folder order from the
+ * file the user actually picked.
+ *
+ * An ambiguous name (the same file name in two scanned subfolders) returns -1:
+ * guessing which one was picked would silently show the wrong image.
+ * @param images - cached folder images.
+ * @param name - file name to look for (case-insensitive).
+ * @returns the index, or -1 when absent or ambiguous.
+ */
+export function matchFolderImageByName(images: readonly SkinFolderImage[], name: string): number {
+  const wanted = name.trim().toLowerCase()
+  if (wanted === '') return -1
+  let found = -1
+  for (const [index, image] of images.entries()) {
+    if (image.name.toLowerCase() !== wanted) continue
+    if (found >= 0) return -1 // ambiguous
+    found = index
+  }
+  return found
+}
 
 /** Return a copy of `images` in slideshow order. */
 export function sortFolderImages(images: readonly SkinFolderImage[]): SkinFolderImage[] {
@@ -53,15 +88,6 @@ export function folderStatus(settings: SkinSettings): FolderStatus {
   }
 }
 
-/** The next unused index after `currentIndex` (ascending order), or undefined when the list is empty. */
-function pickSequential(unused: readonly number[], currentIndex: number): number | undefined {
-  if (unused.length === 0) return undefined
-  for (const index of unused) {
-    if (index > currentIndex) return index
-  }
-  return unused[0]
-}
-
 /** Back-history bound: a long slideshow must not grow the persisted blob forever. */
 export const MAX_HISTORY = 64
 
@@ -72,13 +98,42 @@ function pushHistory(history: readonly string[], outgoing: string | undefined): 
 }
 
 /**
- * Advance the slideshow by one image and record it as shown.
+ * Settings showing one folder image. The other background kinds are cleared
+ * with it, so a stale data URL or URL cannot linger in the persisted blob (and
+ * a later 下一张 cannot leave the page claiming two sources at once).
+ */
+function showingFolderImage(
+  settings: SkinSettings,
+  index: number,
+  records: Pick<SkinSettings, 'usedPaths' | 'history'>,
+): SkinSettings {
+  return {
+    ...settings,
+    enabled: true,
+    source: 'folder',
+    imageDataUrl: null,
+    imageName: null,
+    url: null,
+    currentIndex: index,
+    usedPaths: records.usedPaths,
+    history: records.history,
+  }
+}
+
+/**
+ * Advance the slideshow by one image.
  *
- * Unused images first; when none remain, the pass restarts (the used set is
- * cleared) and the currently shown image is excluded, so a full cycle never
- * repeats back-to-back. Returns the settings unchanged when there is nothing to
- * show (an empty folder), so callers can treat "index did not move" as "no
- * folder loaded".
+ * SEQUENTIAL walks the folder in order — the image after the current one, then
+ * the next, wrapping at the end — so picking image 10 makes 下一张 show 11 (and
+ * 上一张 show 9). The pass record is not used here: a walk in index order never
+ * repeats an image until it wraps, which is the whole point of the mode.
+ *
+ * RANDOM draws uniformly from the images not shown in this pass; when none
+ * remain the pass restarts (the used set is cleared) excluding the image on
+ * screen, so a full cycle never repeats back-to-back.
+ *
+ * With an empty folder the settings are returned unchanged apart from clearing
+ * the cursor, so callers can treat "index did not move" as "no folder loaded".
  * @param settings - current settings.
  * @param rng - uniform [0,1) source for random mode (injected by tests).
  * @returns the next settings value.
@@ -86,6 +141,11 @@ function pushHistory(history: readonly string[], outgoing: string | undefined): 
 export function advanceFolder(settings: SkinSettings, rng: () => number = Math.random): SkinSettings {
   const images = settings.folderImages
   if (images.length === 0) return { ...settings, currentIndex: -1, usedPaths: [], history: [] }
+
+  if (settings.orderMode !== 'random') {
+    const index = settings.currentIndex < 0 ? 0 : (settings.currentIndex + 1) % images.length
+    return showingFolderImage(settings, index, { usedPaths: [], history: [] })
+  }
 
   const indexOfPath = new Map(images.map((image, index) => [image.path, index] as const))
   const used = new Set<number>()
@@ -103,45 +163,40 @@ export function advanceFolder(settings: SkinSettings, rng: () => number = Math.r
       .filter(index => images.length === 1 || index !== settings.currentIndex)
   }
 
-  const picked = settings.orderMode === 'random'
-    ? candidates[Math.min(candidates.length - 1, Math.max(0, Math.floor(rng() * candidates.length)))]
-    : pickSequential(candidates, settings.currentIndex)
+  const picked = candidates[Math.min(candidates.length - 1, Math.max(0, Math.floor(rng() * candidates.length)))]
   /* v8 ignore next -- candidates is non-empty: either image indices exist or the single-image pass is non-empty. */
   if (picked === undefined) return settings
 
   const usedThisPass = [...nextUsed, picked].sort((left, right) => left - right)
-  return {
-    ...settings,
-    enabled: true,
-    source: 'folder',
-    currentIndex: picked,
+  return showingFolderImage(settings, picked, {
     usedPaths: usedThisPass.map(index => (images[index] as SkinFolderImage).path),
     // The image being left behind is where 上一张 goes back to.
     history: pushHistory(settings.history, images[settings.currentIndex]?.path),
-  }
+  })
 }
 
 /**
- * Whether 「上一张」 has anywhere to go: a recorded earlier image, or — in
- * sequential mode — an earlier image in folder order to fall back to.
+ * Whether 「上一张」 has anywhere to go: sequential mode walks the folder order,
+ * so any folder with more than one image has a previous one; random mode needs a
+ * recorded earlier image.
  * @param settings - current settings.
  * @returns true when the previous-image action would move.
  */
 export function canGoPrevious(settings: SkinSettings): boolean {
   if (settings.folderImages.length === 0) return false
-  if (settings.history.length > 0) return true
-  return settings.orderMode === 'sequential'
+  if (settings.orderMode !== 'random') return settings.folderImages.length > 1
+  return settings.history.length > 0
 }
 
 /**
- * Go back one image: the recorded previous image when there is one, else — in
- * sequential mode — the previous image in folder order, wrapping from the first
- * to the last. Random mode without history has no previous image and returns
- * the settings unchanged.
+ * Go back one image.
+ *
+ * Sequential steps one index back through the folder order, wrapping from the
+ * first to the last (picking 10 then 上一张 shows 9). Random pops the recorded
+ * previous image; with no history it returns the settings unchanged.
  *
  * Going back never rewrites the pass record: everything in the history was
- * already shown, and the image returned to is marked as shown if it somehow was
- * not (the sequential wrap can reach an image the pass had not touched yet).
+ * already shown.
  * @param settings - current settings.
  * @returns the previous settings value.
  */
@@ -149,9 +204,15 @@ export function previousFolder(settings: SkinSettings): SkinSettings {
   const images = settings.folderImages
   if (!canGoPrevious(settings)) return settings
 
+  if (settings.orderMode !== 'random') {
+    const from = settings.currentIndex >= 0 ? settings.currentIndex : 0
+    const index = (from - 1 + images.length) % images.length
+    return showingFolderImage(settings, index, { usedPaths: [], history: [] })
+  }
+
   const history = [...settings.history]
   const recorded = history.pop()
-  const recordedIndex = recorded === undefined ? -1 : images.findIndex(image => image.path === recorded)
+  const recordedIndex = recorded === undefined ? -1 : images.findIndex(image => samePath(image.path, recorded))
   // Nothing shown yet reads as "before the first image", so the wrap lands on the last.
   const from = settings.currentIndex >= 0 ? settings.currentIndex : 0
   const index = recordedIndex >= 0 ? recordedIndex : (from - 1 + images.length) % images.length
@@ -159,14 +220,10 @@ export function previousFolder(settings: SkinSettings): SkinSettings {
   const shown = images[index] as SkinFolderImage
   const used = new Set(settings.usedPaths)
   used.add(shown.path)
-  return {
-    ...settings,
-    enabled: true,
-    source: 'folder',
-    currentIndex: index,
+  return showingFolderImage(settings, index, {
     usedPaths: images.filter(image => used.has(image.path)).map(image => image.path),
     history,
-  }
+  })
 }
 
 /**
@@ -186,9 +243,9 @@ export function folderSignature(images: readonly SkinFolderImage[]): string {
  * This is what an automatic rescan uses: the shown image is kept (matched by
  * path, or — when its file disappeared — the slot it occupied), and the pass
  * record and back-history keep only paths that still exist. Images added since
- * the last scan are simply not marked as shown yet, so 「下一张」 reaches them.
- * The active source is deliberately untouched: a rescan while a preset is on
- * screen must not switch the background back to the folder.
+ * the last scan simply join the list, so 「下一张」 reaches them.
+ * The active source is deliberately untouched: a rescan while a URL background
+ * is on screen must not switch the background back to the folder.
  * @param settings - current settings.
  * @param images - the freshly scanned images.
  * @returns settings whose list and records track the folder.
@@ -214,16 +271,34 @@ export function refreshFolderState(
 }
 
 /**
+ * Show one cached folder image, clearing the other background kinds. This is the
+ * "the user picked THIS image" commit shared by the local-file row and the
+ * file-dialog flow.
+ * @param settings - current settings.
+ * @param index - index into `settings.folderImages`.
+ * @returns the settings showing that image, or the input when the index is stale.
+ */
+export function focusFolderImage(settings: SkinSettings, index: number): SkinSettings {
+  if (index < 0 || index >= settings.folderImages.length) return settings
+  return showingFolderImage(settings, index, { usedPaths: [], history: [] })
+}
+
+/**
  * Fold a scan into the settings when the user loads (or reloads) a folder.
  *
  * The same folder is MERGED, so adding or removing files never resets the
- * slideshow or the pass record — new files join the not-yet-shown queue. A
- * different folder starts a fresh pass. Either way the other background
- * sources are cleared, so localStorage keeps only the (small) path cache.
+ * slideshow — new files simply join the list. A different folder starts fresh.
+ * Either way the other background sources are cleared, so localStorage keeps
+ * only the (small) path cache.
+ *
+ * `focusPath` is the "open THIS image" case behind the local-file row: a file
+ * was named (typed, pasted, or derived from a folder), so the shown image is
+ * that file — which also fixes where 下一张/上一张 walk from.
  * @param settings - current settings.
  * @param folderPath - the folder that was just scanned.
  * @param recursive - whether that scan descended into subdirectories.
  * @param images - the scanned images, already in slideshow order.
+ * @param focusPath - absolute path of the image to show, when the caller named one.
  * @returns settings pointing at the folder, with one image picked when any exist.
  */
 export function loadFolderState(
@@ -231,6 +306,7 @@ export function loadFolderState(
   folderPath: string,
   recursive: boolean,
   images: readonly SkinFolderImage[],
+  focusPath?: string,
 ): SkinSettings {
   const sorted = sortFolderImages(images).slice(0, MAX_CACHED_IMAGES)
   const activated: SkinSettings = {
@@ -240,10 +316,13 @@ export function loadFolderState(
     imageDataUrl: null,
     imageName: null,
     url: null,
-    preset: null,
     folderPath,
     folderRecursive: recursive,
     folderImages: sorted,
+  }
+  if (focusPath !== undefined) {
+    const focused = sorted.findIndex(image => samePath(image.path, focusPath))
+    if (focused >= 0) return { ...activated, currentIndex: focused, usedPaths: [], history: [] }
   }
   if (folderPath === settings.folderPath) {
     const merged = refreshFolderState(activated, sorted)

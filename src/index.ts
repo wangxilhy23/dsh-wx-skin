@@ -37,11 +37,20 @@ export const name = 'dsh-wx-skin'
 /** Services required before the routes can be registered. */
 export const inject = ['webServer']
 
-/** Route paths served by the host half (outside /api, mirrors /dsh-wx-* conventions). */
-export const LOAD_ROUTE = '/dsh-wx-skin/load'
-export const SAVE_ROUTE = '/dsh-wx-skin/save'
-export const FOLDER_ROUTE = '/dsh-wx-skin/folder'
-export const IMAGE_ROUTE = '/dsh-wx-skin/image'
+/**
+ * Absolute registration keys served by the host half (outside /api, mirrors the
+ * /dsh-wx-* conventions). The browser half addresses the same resources through
+ * its own document-relative `*_ROUTE` forms: app-owned browser references must
+ * follow the document base (`<base href="./">` injected by the shell) so one
+ * prefix-stripping proxy mount reaches the same listener, while route keys stay
+ * absolute
+ * (`.agents/notes/implemented/architecture/2026-09-14-web-document-relative-app-routes.md`
+ * in the DSH checkout).
+ */
+export const LOAD_PATH = '/dsh-wx-skin/load'
+export const SAVE_PATH = '/dsh-wx-skin/save'
+export const FOLDER_PATH = '/dsh-wx-skin/folder'
+export const IMAGE_PATH = '/dsh-wx-skin/image'
 
 /** Upper bound on a settings payload — image data URLs can reach ~MBs. */
 const MAX_SAVE_BYTES = 16 * 1024 * 1024
@@ -182,7 +191,7 @@ export function apply(ctx: Context): void {
     // GET /dsh-wx-skin/load — read the durable copy (raw; client sanitizes).
     disposers.push(webServer.register({
       kind: 'exact',
-      path: LOAD_ROUTE,
+      path: LOAD_PATH,
       handler: (req, res) => {
         if (!guard(req, res, 'GET')) return
         // Absent or corrupt → the client falls back to localStorage/defaults.
@@ -193,7 +202,7 @@ export function apply(ctx: Context): void {
     // POST /dsh-wx-skin/save — atomically persist the settings blob.
     disposers.push(webServer.register({
       kind: 'exact',
-      path: SAVE_ROUTE,
+      path: SAVE_PATH,
       handler: async (req, res) => {
         if (!guard(req, res, 'POST')) return
         const body = await readJsonBody(req, MAX_SAVE_BYTES)
@@ -223,7 +232,7 @@ export function apply(ctx: Context): void {
     // POST /dsh-wx-skin/folder — scan a user-picked folder into the image cache.
     disposers.push(webServer.register({
       kind: 'exact',
-      path: FOLDER_ROUTE,
+      path: FOLDER_PATH,
       handler: async (req, res) => {
         if (!guard(req, res, 'POST')) return
         const body = await readJsonBody(req, MAX_FOLDER_BODY_BYTES)
@@ -266,7 +275,7 @@ export function apply(ctx: Context): void {
     // GET|HEAD /dsh-wx-skin/image — serve one image from inside the picked folder.
     disposers.push(webServer.register({
       kind: 'exact',
-      path: IMAGE_ROUTE,
+      path: IMAGE_PATH,
       handler: (req, res) => {
         if (!guard(req, res, ['GET', 'HEAD'])) return
         const root = confinementRoot(path)

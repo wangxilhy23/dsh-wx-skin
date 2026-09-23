@@ -1,21 +1,21 @@
 /**
- * dsh-wx-skin — panel palette guard.
+ * dsh-wx-skin — settings-page palette guard.
  *
- * The settings panel keeps its own OPAQUE surface, while `--dsw-alias-*` tokens
- * invert with the document theme. Reading an alias token inside the panel is
- * therefore the defect this suite prevents: in the dark theme
- * `--dsw-alias-label-primary` is near-white, which rendered light text on the
- * panel's light surface. The panel declares its own `--wx-panel-*` set for both
- * palettes instead, and this file checks that structure plus the contrast of
- * every pair that carries text.
+ * The skin's settings page (inside the harness Settings panel) keeps its own
+ * semantic `--wx-panel-*` palette, while `--dsw-alias-*` tokens invert with the
+ * document theme. Reading an alias token directly inside the page is therefore
+ * the defect this suite prevents: in the dark theme `--dsw-alias-label-primary`
+ * is near-white, which rendered light text on the page's light controls. The
+ * page declares its own `--wx-panel-*` set for both palettes instead, and this
+ * file checks that structure plus the contrast of every pair that carries text.
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('../src/client/skin.module.css', import.meta.url), 'utf8')
 
-/** Comment separating the shell-side entry rules from the panel palette. */
-const PANEL_MARKER = '/* ---- popover panel ---- */'
+/** Comment separating the shell-side action rules from the settings palette. */
+const PANEL_MARKER = '/* ---- settings page (rendered inside the harness Settings panel) ---- */'
 /** Selector opening the dark palette override. */
 const DARK_SELECTOR = 'body[data-ds-dark-theme] .panel {'
 
@@ -100,15 +100,13 @@ describe('panel palette', () => {
     expect(panelSection).not.toContain('--dsw-alias-')
   })
 
-  it('defines both palettes with fallbacks, a shadow, and an explicit color-scheme', () => {
+  it('defines both palettes with fallbacks and an explicit color-scheme', () => {
     const light = palette(lightBlock, 'light palette')
     const dark = palette(darkBlock, 'dark palette')
     for (const name of COLOR_VARS) {
       expect(light.has(name), `light palette: missing --wx-panel-${name}`).toBe(true)
       expect(dark.has(name), `dark palette: missing --wx-panel-${name}`).toBe(true)
     }
-    expect(lightBlock).toContain('--wx-panel-shadow:')
-    expect(darkBlock).toContain('--wx-panel-shadow:')
     expect(lightBlock).toContain('color-scheme: light;')
     expect(darkBlock).toContain('color-scheme: dark;')
     // A dark palette that merely copies the light one would defeat the switch.
@@ -135,5 +133,28 @@ describe('panel palette', () => {
     const primaryHoverAt = panelSection.indexOf('.buttonPrimary:hover {')
     expect(hoverRuleAt).toBeGreaterThan(0)
     expect(primaryHoverAt).toBeGreaterThan(hoverRuleAt)
+  })
+})
+
+/**
+ * The preview box promises "this is your wallpaper": it must show the WHOLE
+ * image, not the crop the wallpaper layer uses to fill the window.
+ */
+describe('background preview', () => {
+  const previewAt = css.indexOf('.preview {')
+  const previewRule = css.slice(previewAt, css.indexOf('}', previewAt))
+
+  it('contains the whole image instead of cropping it', () => {
+    expect(previewAt).toBeGreaterThan(0)
+    expect(previewRule).toContain('background-size: contain;')
+    expect(previewRule).not.toContain('cover')
+    expect(previewRule).toContain('background-repeat: no-repeat;')
+  })
+
+  it('is tall enough to actually read the image', () => {
+    // `height: min(<vh>, <px>)` — the cap is the regression surface.
+    const cap = /height:\s*min\(\d+vh,\s*(\d+)px\)/.exec(previewRule)
+    expect(cap, 'preview height must be a viewport-capped pixel value').not.toBeNull()
+    expect(Number(cap?.[1])).toBeGreaterThanOrEqual(300)
   })
 })

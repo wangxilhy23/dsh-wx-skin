@@ -2,7 +2,7 @@
  * dsh-wx-skin — host-persistence client unit tests (fake fetch, no DOM).
  */
 import { describe, expect, it } from 'vitest'
-import { hostListFolder, hostLoad, hostSave, FOLDER_PATH, LOAD_PATH, SAVE_PATH } from '../src/client/skin-host.ts'
+import { hostListFolder, hostLoad, hostSave, FOLDER_ROUTE, LOAD_ROUTE, SAVE_ROUTE } from '../src/client/skin-host.ts'
 import { DEFAULT_SETTINGS } from '../src/client/skin-store.ts'
 import type { SkinSettings } from '../src/core/types.ts'
 
@@ -56,7 +56,10 @@ describe('hostLoad', () => {
       return new Response(JSON.stringify({ ok: true, settings: null }), { status: 200 })
     }) as typeof fetch
     await hostLoad(spy)
-    expect(requested).toBe(LOAD_PATH)
+    // Document-relative: the shell's <base href="./"> resolves it under any mount.
+    expect(requested).toBe('dsh-wx-skin/load')
+    expect(requested).toBe(LOAD_ROUTE)
+    expect(requested.startsWith('/')).toBe(false)
   })
 })
 
@@ -70,7 +73,7 @@ describe('hostSave', () => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 })
     }) as typeof fetch
     expect(await hostSave(enabledImage, spy)).toBe(true)
-    expect(requested).toBe(SAVE_PATH)
+    expect(requested).toBe(SAVE_ROUTE)
     expect(posted).toBe(JSON.stringify({ settings: enabledImage }))
   })
 
@@ -105,7 +108,7 @@ describe('hostListFolder', () => {
     }) as typeof fetch
 
     const result = await hostListFolder('D:\\pics', true, spy)
-    expect(requested).toBe(FOLDER_PATH)
+    expect(requested).toBe(FOLDER_ROUTE)
     expect(posted).toBe(JSON.stringify({ path: 'D:\\pics', recursive: true }))
     expect(result).toEqual({ ok: true, root: 'D:\\pics', truncated: false, images: scanned.images })
   })

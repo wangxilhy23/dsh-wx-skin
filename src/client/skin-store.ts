@@ -1,11 +1,10 @@
 /**
  * dsh-wx-skin — pure skin settings state: defaults, sanitization, persistence
- * (localStorage), preset catalog, and the CSS-variable projection consumed by
- * the DOM applier. No DOM access here — tests exercise these functions with a
- * fake storage.
+ * (localStorage), and the CSS-variable projection consumed by the DOM applier.
+ * No DOM access here — tests exercise these functions with a fake storage.
  * @module dsh-wx-skin/client/skin-store
  */
-import type { SkinFolderImage, SkinOrderMode, SkinSettings, SkinSource } from '../core/types.ts'
+import type { SkinFitMode, SkinFolderImage, SkinOrderMode, SkinSettings, SkinSource } from '../core/types.ts'
 import { MAX_CACHED_IMAGES, imageUrl } from './skin-folder.ts'
 
 /** localStorage key holding the durable settings JSON. */
@@ -17,13 +16,15 @@ export const ACTIVE_ATTR = 'data-wx-skin-active'
 /** Attribute on the injected background layer div. */
 export const LAYER_ATTR = 'data-wx-skin-layer'
 
-/** Attribute on the injected sidebar entry button. */
+/** Attribute on the slot-rendered sidebar entry button (styling + test hook). */
 export const ENTRY_ATTR = 'data-wx-skin-entry'
 
 /** CSS custom properties the applier writes on documentElement. */
 export const SKIN_CSS_VARS = [
   '--wx-skin-bg-image',
-  '--wx-skin-bg-color',
+  '--wx-skin-bg-size',
+  '--wx-skin-bg-repeat',
+  '--wx-skin-bg-position',
   '--wx-skin-scrim',
   '--wx-skin-blur',
   '--wx-skin-surface',
@@ -34,9 +35,38 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-const SOURCES: readonly SkinSource[] = ['image', 'url', 'preset', 'folder', 'none']
+const SOURCES: readonly SkinSource[] = ['image', 'url', 'folder', 'none']
 
 const ORDER_MODES: readonly SkinOrderMode[] = ['sequential', 'random']
+
+/** Background fit modes, in the order the settings page offers them. */
+export const FIT_MODES: readonly SkinFitMode[] = ['fill', 'fit', 'stretch', 'tile', 'center']
+
+/** The three CSS longhands one fit mode projects onto the background layer. */
+export interface FitProjection {
+  /** `background-size`. */
+  size: string
+  /** `background-repeat`. */
+  repeat: string
+  /** `background-position`. */
+  position: string
+}
+
+/**
+ * Map a fit mode onto the background layer's CSS — the desktop wallpaper
+ * vocabulary: fill crops, fit letterboxes, stretch may distort, tile repeats at
+ * the image's natural size, and center shows one natural-size image in the
+ * middle.
+ * @param fit - the chosen mode.
+ * @returns the longhand values for `--wx-skin-bg-*`.
+ */
+export function fitProjection(fit: SkinFitMode): FitProjection {
+  if (fit === 'fit') return { size: 'contain', repeat: 'no-repeat', position: 'center' }
+  if (fit === 'stretch') return { size: '100% 100%', repeat: 'no-repeat', position: 'center' }
+  if (fit === 'tile') return { size: 'auto', repeat: 'repeat', position: 'left top' }
+  if (fit === 'center') return { size: 'auto', repeat: 'no-repeat', position: 'center' }
+  return { size: 'cover', repeat: 'no-repeat', position: 'center' }
+}
 
 const MAX_DIM = 0.8
 const MAX_BLUR = 24
@@ -52,10 +82,10 @@ export const DEFAULT_SETTINGS: SkinSettings = Object.freeze({
   imageDataUrl: null,
   imageName: null,
   url: null,
-  preset: null,
   dim: 0.35,
   blur: 0,
   surface: DEFAULT_SURFACE,
+  fit: 'fill',
   folderPath: null,
   folderImages: [],
   folderRecursive: false,
@@ -92,24 +122,6 @@ export function sanitizeFolderImages(raw: unknown): SkinFolderImage[] {
   return images
 }
 
-/** A selectable preset skin: solid color or gradient CSS value. */
-export interface SkinPreset {
-  id: string
-  label: string
-  /** CSS background value (solid color or linear-gradient). */
-  value: string
-}
-
-/** Built-in presets — immediate effect without picking an image. */
-export const PRESETS: readonly SkinPreset[] = Object.freeze([
-  { id: 'color-ink', label: '墨蓝', value: '#1f2a44' },
-  { id: 'color-slate', label: '石板', value: '#3b4252' },
-  { id: 'color-sand', label: '暖沙', value: '#e9e2d0' },
-  { id: 'grad-sunset', label: '落日渐变', value: 'linear-gradient(135deg, #ff9a8b, #ff6a88 45%, #ff99ac)' },
-  { id: 'grad-ocean', label: '深海渐变', value: 'linear-gradient(135deg, #0f2027, #203a43 55%, #2c5364)' },
-  { id: 'grad-aurora', label: '极光渐变', value: 'linear-gradient(135deg, #43cea2, #185a9d 60%, #9cecfb)' },
-])
-
 /** Coerce an unknown persisted value into a valid SkinSettings. */
 export function sanitizeSettings(raw: unknown): SkinSettings {
   const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
@@ -128,10 +140,10 @@ export function sanitizeSettings(raw: unknown): SkinSettings {
     imageDataUrl: str(o.imageDataUrl),
     imageName: str(o.imageName),
     url: str(o.url),
-    preset: str(o.preset),
     dim: clamp(num(o.dim, DEFAULT_SETTINGS.dim), 0, MAX_DIM),
     blur: clamp(num(o.blur, DEFAULT_SETTINGS.blur), 0, MAX_BLUR),
     surface: clamp(num(o.surface, DEFAULT_SETTINGS.surface), MIN_SURFACE, MAX_SURFACE),
+    fit: FIT_MODES.includes(o.fit as SkinFitMode) ? (o.fit as SkinFitMode) : DEFAULT_SETTINGS.fit,
     folderPath: str(o.folderPath),
     folderImages,
     folderRecursive: o.folderRecursive === true,
@@ -187,10 +199,10 @@ export function isDefaultSettings(settings: SkinSettings): boolean {
     && settings.imageDataUrl === DEFAULT_SETTINGS.imageDataUrl
     && settings.imageName === DEFAULT_SETTINGS.imageName
     && settings.url === DEFAULT_SETTINGS.url
-    && settings.preset === DEFAULT_SETTINGS.preset
     && settings.dim === DEFAULT_SETTINGS.dim
     && settings.blur === DEFAULT_SETTINGS.blur
     && settings.surface === DEFAULT_SETTINGS.surface
+    && settings.fit === DEFAULT_SETTINGS.fit
     && settings.folderPath === DEFAULT_SETTINGS.folderPath
     && settings.folderImages.length === 0
     && settings.folderRecursive === DEFAULT_SETTINGS.folderRecursive
@@ -207,7 +219,7 @@ export function isDefaultSettings(settings: SkinSettings): boolean {
 export interface CurrentImageLabel {
   /** Name shown in the panel (may be ellipsized by CSS). */
   label: string
-  /** Full path / URL / preset value behind the hover title. */
+  /** Full path / URL behind the hover title. */
   detail: string
 }
 
@@ -263,11 +275,6 @@ export function currentImageLabel(settings: SkinSettings): CurrentImageLabel | n
     if (settings.url === null) return null
     return { label: urlBasename(settings.url), detail: settings.url }
   }
-  if (settings.source === 'preset') {
-    if (settings.preset === null) return null
-    const preset = PRESETS.find(candidate => candidate.value === settings.preset)
-    return { label: preset?.label ?? settings.preset, detail: settings.preset }
-  }
   return null
 }
 
@@ -283,16 +290,16 @@ export function cssVariables(settings: SkinSettings): Partial<Record<(typeof SKI
     vars['--wx-skin-bg-image'] = `url("${settings.imageDataUrl}")`
   } else if (settings.source === 'url' && settings.url !== null) {
     vars['--wx-skin-bg-image'] = `url("${escapeCssUrl(settings.url)}")`
-  } else if (settings.source === 'preset' && settings.preset !== null) {
-    // A gradient goes to background-image; a solid color to background-color.
-    if (settings.preset.includes('gradient')) vars['--wx-skin-bg-image'] = settings.preset
-    else vars['--wx-skin-bg-color'] = settings.preset
   } else if (settings.source === 'folder') {
     // Served by the host from inside the picked folder; the URL changes with the
     // file's mtime, so the browser cache never shows a stale image.
     const image = settings.folderImages[settings.currentIndex]
     if (image !== undefined) vars['--wx-skin-bg-image'] = `url("${escapeCssUrl(imageUrl(image))}")`
   }
+  const projection = fitProjection(settings.fit)
+  vars['--wx-skin-bg-size'] = projection.size
+  vars['--wx-skin-bg-repeat'] = projection.repeat
+  vars['--wx-skin-bg-position'] = projection.position
   vars['--wx-skin-scrim'] = `rgba(0, 0, 0, ${settings.dim.toFixed(3)})`
   vars['--wx-skin-blur'] = `${Math.round(settings.blur)}px`
   vars['--wx-skin-surface'] = settings.surface.toFixed(3)
