@@ -10,7 +10,13 @@
  * 2. A hard-coded surface value instead of `rgb(<hue> / var(--wx-skin-surface))`.
  *    DSH 0.1.7 made exactly that change to `--dsw-specific-menu` — it stopped
  *    being an alias of a token this sheet already took over and became a literal
- *    rgba, so the shell's menus left the slider's control.
+ *    rgba, so the shell's overlays left the slider's control.
+ * 3. A NEW upstream surface token the sheet never learns about. 0.1.7-rc added
+ *    two batches this way: the shared `MenuSurface` material moved every
+ *    dropdown / context menu / listbox onto `--dsw-menu-surface-fill`, and the
+ *    changed-files diff rows traded their color-mix for the four opaque
+ *    `--dsw-alias-file-diff-*` fills. Both are covered below; the `-marker`
+ *    companions are foreground tints and are deliberately not.
  */
 import { describe, expect, it } from 'vitest'
 import { GLOBAL_SKIN_CSS } from '../src/client/global-skin-css.ts'
@@ -29,6 +35,7 @@ const REQUIRED_TOKENS = [
   '--dsw-alias-bg-multi-select',
   '--dsw-specific-sidebar-fill',
   '--dsw-specific-menu',
+  '--dsw-menu-surface-fill',
   '--dsw-specific-input-major',
   '--dsw-specific-selector',
   '--dsw-specific-tip',
@@ -40,6 +47,10 @@ const REQUIRED_TOKENS = [
   '--dsw-alias-markdown-placeholder',
   '--dsw-alias-markdown-tag',
   '--dsw-alias-markdown-citation',
+  '--dsw-alias-file-diff-added-bg',
+  '--dsw-alias-file-diff-added-gutter',
+  '--dsw-alias-file-diff-deleted-bg',
+  '--dsw-alias-file-diff-deleted-gutter',
 ] as const
 
 const lightAt = GLOBAL_SKIN_CSS.indexOf(LIGHT_MARKER)

@@ -66,11 +66,18 @@ html[data-wx-skin-active] body {
   --dsw-alias-bg-module-platform: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-bg-multi-select: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
   /* DSH 0.1.7 turned this from the bg-layer-3 alias (which this sheet already
-     took over) into a literal rgba, so every menu/dropdown/dock/panel surface
-     stopped following the 透出 slider. Re-bound to the same hue at the skin's own
-     surface opacity; the !important also outranks the darwin near-opaque
-     override in the shell's base.css. */
+     took over) into a literal rgba, so every overlay still reading it (hover
+     cards, dock panels, selectors, sticky menu headers) stopped following the
+     透出 slider. Re-bound to the same hue at the skin's own surface opacity; the
+     !important also outranks the darwin near-opaque override, which 0.1.7-rc
+     moved out of the shell's base.css into ui-theme's design-platform.css
+     (unchanged 0.94 values). */
   --dsw-specific-menu: rgb(248 249 250 / var(--wx-skin-surface, 0.72)) !important;
+  /* 0.1.7-rc moved every shared dropdown / context menu / listbox onto the
+     MenuSurface primitive, whose material layer paints with THIS token instead
+     of the one above — while sticky menu headers kept the one above. Both are
+     bound here, or a menu's header and body would drift apart under the skin. */
+  --dsw-menu-surface-fill: rgb(248 249 250 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-sidebar-fill: rgb(249 250 251 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-input-major: rgb(255 255 255 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-selector: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
@@ -83,6 +90,13 @@ html[data-wx-skin-active] body {
   --dsw-alias-markdown-placeholder: rgb(245 246 247 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-markdown-tag: rgb(241 243 245 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-markdown-citation: rgb(235 238 242 / var(--wx-skin-surface, 0.72)) !important;
+  /* 0.1.7-rc replaced the changed-files diff rows' 8% color-mix with these opaque
+     literals; re-bound so a diff over the wallpaper still shows it through. The
+     '-marker' companions are foreground tints, not surfaces, and stay untouched. */
+  --dsw-alias-file-diff-added-bg: rgb(230 244 231 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-alias-file-diff-added-gutter: rgb(237 247 237 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-alias-file-diff-deleted-bg: rgb(252 230 226 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-alias-file-diff-deleted-gutter: rgb(253 236 233 / var(--wx-skin-surface, 0.72)) !important;
 }
 
 /* ---- translucent surfaces: dark palette ---- */
@@ -95,6 +109,7 @@ html[data-wx-skin-active] body[data-ds-dark-theme] {
   --dsw-alias-bg-module-platform: rgb(53 54 56 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-bg-multi-select: rgb(44 44 46 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-menu: rgb(48 49 54 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-menu-surface-fill: rgb(48 49 54 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-sidebar-fill: rgb(27 27 28 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-input-major: rgb(44 44 46 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-specific-selector: rgb(53 54 56 / var(--wx-skin-surface, 0.72)) !important;
@@ -107,6 +122,10 @@ html[data-wx-skin-active] body[data-ds-dark-theme] {
   --dsw-alias-markdown-placeholder: rgb(44 44 46 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-markdown-tag: rgb(44 44 46 / var(--wx-skin-surface, 0.72)) !important;
   --dsw-alias-markdown-citation: rgb(53 54 56 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-alias-file-diff-added-bg: rgb(31 49 36 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-alias-file-diff-added-gutter: rgb(19 32 22 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-alias-file-diff-deleted-bg: rgb(60 31 27 / var(--wx-skin-surface, 0.72)) !important;
+  --dsw-alias-file-diff-deleted-gutter: rgb(40 19 14 / var(--wx-skin-surface, 0.72)) !important;
 }
 
 /* ---- sidebar entry active indicator ---- */

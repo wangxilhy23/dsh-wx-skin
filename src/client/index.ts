@@ -12,11 +12,14 @@
  * The only host capabilities the skin borrows are SCOPED OPTIONAL dependencies,
  * never `inject` on this plugin:
  *
- * - `uiWorkspace.pickDirectory` (the harness's native directory picker) appears
- *   only after the client↔host connection is up — always later than this
- *   `apply`. A value snapshotted here would always be undefined, which is
- *   exactly why the panel never showed a 「选择文件夹」 button. It is watched with
- *   `ctx.inject(['uiWorkspace'], …)` and read lazily through a bridge.
+ * - The native directory picker. Two carriers serve it, and `skin-picker.ts`
+ *   prefers the one that owns the dialog: the official Desktop application's
+ *   renderer-preload `globalThis.__DSH_DIRECTORY_PICKER__`, else
+ *   `uiWorkspace.pickDirectory` (the Web carrier's harness service, which
+ *   appears only after the client↔host connection is up — always later than
+ *   this `apply`. A value snapshotted here would always be undefined, which is
+ *   exactly why the panel never showed a 「选择文件夹」 button). The Web service is
+ *   watched with `ctx.inject(['uiWorkspace'], …)`; both are read lazily.
  * - `slots` (the slot registry) plus ui-sidebar's `sidebar.footer.action`
  *   declaration. Declaring `inject: ['slots']` on the plugin would make the
  *   whole browser half — background layer and persistence included — wait on a
@@ -29,7 +32,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { FOOTER_SLOT, makeSkinFooter } from './entries.tsx'
 import { SETTINGS_SECTION, makeSkinSettings } from './skin-settings.tsx'
 import { createSkinController, type SkinController, type SkinControllerOptions } from './skin-controller.tsx'
-import { createPickerBridge, type DirectoryPickerLike } from './skin-picker.ts'
+import { createPickerBridge, desktopDirectoryPicker, type DirectoryPickerLike } from './skin-picker.ts'
 import { teardownSkinDom } from './skin-dom.ts'
 
 /** No hard service dependencies — the skin only touches the DOM and the slots. */
@@ -69,7 +72,9 @@ export function apply(ctx: Context): void {
     })
 
     const options: SkinControllerOptions = {
-      picker: createPickerBridge(() => service),
+      // Desktop carrier first (its preload dialog is present from the start),
+      // then the Web carrier's service, which arrives later.
+      picker: createPickerBridge(() => service, desktopDirectoryPicker),
       onPickerChange: (listener) => {
         refresh = listener
         return () => {

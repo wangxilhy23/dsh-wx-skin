@@ -134,6 +134,49 @@ describe('settings routes', () => {
   })
 })
 
+describe('desktop carrier', () => {
+  /**
+   * The official Desktop application (`apps/desktop`) serves its document from
+   * `dsh-app://app` and relays it to this Host through Electron's
+   * `protocol.handle` → `forwardWebRequest`, which DELETES `origin` and
+   * `sec-fetch-site` before the Host sees the request
+   * (`apps/desktop/src/web-document.ts`). Requiring a loopback Origin here would
+   * break the entire plugin on the desktop, so those unmarked requests must keep
+   * working — and a request that does carry an Origin must still be judged by it.
+   */
+  it('serves an unmarked forwarded request on every route', async () => {
+    const scan = await fetch(url('/dsh-wx-skin/folder'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: folder }),
+    })
+    expect(scan.status).toBe(200)
+
+    const saved = await fetch(url('/dsh-wx-skin/save'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ settings: { enabled: true, folderPath: folder } }),
+    })
+    expect(saved.status).toBe(200)
+    expect((await fetch(url('/dsh-wx-skin/load'))).status).toBe(200)
+
+    const image = await fetch(url('/dsh-wx-skin/image?p=' + encodeURIComponent(join(folder, 'a.png'))))
+    expect(image.status).toBe(200)
+  })
+
+  it('accepts the Desktop document origin when a relay keeps it', async () => {
+    // `dsh-app://app` is unforgeable by web pages (Origin is a forbidden header
+    // name for scripts), so accepting it only ever admits the Desktop app itself.
+    const response = await fetch(url('/dsh-wx-skin/load'), { headers: { origin: 'dsh-app://app' } })
+    expect(response.status).toBe(200)
+  })
+
+  it('still refuses a remote web origin', async () => {
+    const response = await fetch(url('/dsh-wx-skin/load'), { headers: { origin: 'https://evil.example' } })
+    expect(response.status).toBe(403)
+  })
+})
+
 describe('folder route', () => {
   it('scans a folder into the sorted bitmap list', async () => {
     const response = await fetch(url('/dsh-wx-skin/folder'), {

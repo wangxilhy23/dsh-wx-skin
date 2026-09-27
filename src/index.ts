@@ -16,13 +16,14 @@
  *   GET  /dsh-wx-skin/image     → image bytes                       (slideshow background)
  *
  * The schema lives in the browser half (sanitizeSettings); the host stores
- * and returns the raw JSON blob it receives. Routes are loopback-only and the
- * file is written atomically (temp + rename) so concurrent clients cannot
- * corrupt it. Image bytes are served only from inside the folder the user
- * picked (the last scan in this process, else `settings.folderPath`), so the
- * route can never be turned into a general file reader. When the webServer
- * service is unavailable the host half stays a no-op and the client falls back
- * to its localStorage behavior.
+ * and returns the raw JSON blob it receives. Routes answer only a local
+ * carrier's document (the browser GUI on this Host's loopback authority, or the
+ * official Desktop application on `dsh-app://app`) and the file is written
+ * atomically (temp + rename) so concurrent clients cannot corrupt it. Image
+ * bytes are served only from inside the folder the user picked (the last scan in
+ * this process, else `settings.folderPath`), so the route can never be turned
+ * into a general file reader. When the webServer service is unavailable the host
+ * half stays a no-op and the client falls back to its localStorage behavior.
  * @module dsh-wx-skin
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -58,7 +59,24 @@ const MAX_SAVE_BYTES = 16 * 1024 * 1024
 /** The folder-scan request body is a path plus a flag. */
 const MAX_FOLDER_BODY_BYTES = 64 * 1024
 
-const LOOPBACK_ORIGINS = ['http://127.0.0.1', 'http://localhost', 'http://[::1]']
+/**
+ * Origins a request may carry and still reach the host routes.
+ *
+ * - The browser GUI is served by this Host from a loopback authority, so its
+ *   same-origin requests carry `http://127.0.0.1:<port>` (or `localhost`, or the
+ *   IPv6 literal).
+ * - The official Desktop application (`apps/desktop` in the DSH checkout) serves
+ *   its whole document from `dsh-app://app` and relays it here through
+ *   Electron's `protocol.handle` → `forwardWebRequest`, which DELETES the
+ *   request's `origin` and `sec-fetch-site` before the Host sees them. Accepting
+ *   the origin anyway keeps these routes working if that relay ever stops
+ *   stripping them, and it cannot widen what the guard fences off: `Origin` is a
+ *   forbidden header name for scripts, so no web page can borrow the Desktop
+ *   origin, and the loopback entries are exactly as forgeable by a local
+ *   non-browser client as this one is. The guard is a cross-site browser fence,
+ *   not a local-process one — a local process already reads files directly.
+ */
+const ACCEPTED_ORIGINS = ['http://127.0.0.1', 'http://localhost', 'http://[::1]', 'dsh-app://app']
 
 /** `node:fs` bound to the scan's injected face. */
 const FS_IO: ScanIo = {
@@ -82,8 +100,8 @@ function settingsPath(): string {
   return join(resolveDshHome(), 'dsh-wx-skin.settings.json')
 }
 
-/** Whether a request may reach the host routes: loopback origin only. */
-function isLoopbackRequest(req: IncomingMessage): boolean {
+/** Whether a request may reach the host routes: a local carrier's document only. */
+function isLocalCarrierRequest(req: IncomingMessage): boolean {
   // A cross-site <img>/CSS request carries no Origin, but it does carry
   // Sec-Fetch-Site — the one signal that separates it from a same-page fetch or
   // a direct address-bar visit.
@@ -91,7 +109,7 @@ function isLoopbackRequest(req: IncomingMessage): boolean {
   if (typeof site === 'string' && site.toLowerCase() === 'cross-site') return false
   const origin = req.headers.origin
   if (origin === undefined) return true // same-origin fetch omits Origin
-  return LOOPBACK_ORIGINS.some((base) => origin === base || origin.startsWith(`${base}:`))
+  return ACCEPTED_ORIGINS.some((base) => origin === base || origin.startsWith(`${base}:`))
 }
 
 /** Send a JSON response. */
@@ -149,14 +167,14 @@ function confinementRoot(settingsFile: string): string | undefined {
   }
 }
 
-/** Common method + loopback guard for every host route. */
+/** Common method + local-carrier guard for every host route. */
 function guard(req: IncomingMessage, res: ServerResponse, method: string | readonly string[]): boolean {
   const accepted = typeof method === 'string' ? [method] : method
   if (req.method === undefined || !accepted.includes(req.method)) {
     sendJson(res, 405, { ok: false, error: 'method not allowed' })
     return false
   }
-  if (!isLoopbackRequest(req)) {
+  if (!isLocalCarrierRequest(req)) {
     sendJson(res, 403, { ok: false, error: 'forbidden' })
     return false
   }
